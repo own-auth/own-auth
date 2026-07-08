@@ -1,0 +1,13 @@
+{
+  "name": "own-auth-basic-node-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "pnpm --filter own-auth build && tsx index.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "own-auth": "workspace:*"
+  }
+}
