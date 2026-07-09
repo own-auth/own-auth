@@ -2,12 +2,6 @@
 
 Framework-independent TypeScript auth with Postgres storage.
 
-This is the npm package for Own Auth. The full guide lives in the repository README so setup and usage do not drift in two places:
-
-- [Get started](https://github.com/tina-li-xx/own-auth#get-started)
-- [Installation](https://github.com/tina-li-xx/own-auth/blob/main/docs/installation.md)
-- [Security model](https://github.com/tina-li-xx/own-auth/blob/main/docs/security-model.md)
-
 ## Install
 
 ```bash

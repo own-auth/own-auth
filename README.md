@@ -347,12 +347,12 @@ psql "$DATABASE_URL" -f own-auth.sql
 - Rate limiting on all sensitive flows
 - Account enumeration protection on reset and verification endpoints
 - Redirect URL allowlist for magic links
-- HTTP-only secure cookies in the HTTP API
 
 ## Docs
 
 - [Installation](./docs/installation.md)
 - [Security Model](./docs/security-model.md)
+- [Security Policy](./SECURITY.md)
 - [Contributing](./CONTRIBUTING.md)
 
 ## Development
@@ -362,6 +362,14 @@ pnpm install
 pnpm test
 pnpm build
 ```
+
+## Release
+
+```bash
+pnpm run release:publish
+```
+
+This runs the release checks, publishes `own-auth`, then creates and pushes the matching Git tag, such as `v0.1.9`.
 
 ## License
 
