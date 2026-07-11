@@ -4,50 +4,248 @@ Own your auth. Own your users.
 
 Framework-independent authentication for TypeScript. Backed by Postgres, controlled by you.
 
+## Quickstart
+
+Get your first login working in under five minutes. You need Node.js 18+ and a Postgres database.
+
+### Install
+
 ```bash
 npm install own-auth
 ```
 
-## Get Started
+### Set Your Environment Variables
 
-Run the migration to set up your database.
+Add your Postgres connection string and token pepper to your environment.
+
+```bash .env
+DATABASE_URL=postgres://user:password@localhost:5432/myapp
+OWN_AUTH_TOKEN_PEPPER=your-random-secret-string
+```
+
+The token pepper adds an extra layer of protection to hashed tokens in your database. Generate a long random string and keep it secret.
+
+Any Postgres database works: local, hosted, Supabase, Neon, Railway, or RDS. Own Auth creates its own tables and does not modify yours.
+
+### Run Migrations
 
 ```bash
-export DATABASE_URL=postgres://localhost:5432/your_database
-export OWN_AUTH_TOKEN_PEPPER=replace-with-a-long-random-secret
 npx own-auth migrate
 ```
 
-Create your auth instance.
+This creates the tables Own Auth needs: users, sessions, tokens, organisations, API keys, and audit logs. Your existing tables are not modified.
 
-```ts
+Run this once during setup.
+
+Verify the database connection and migration version:
+
+```bash
+npx own-auth status
+```
+
+### Create Your Auth Instance
+
+Create an `auth.ts` file in your project. This is the single entry point for all auth operations.
+
+```ts auth.ts
 import { createOwnAuth } from "own-auth";
 
 export const auth = createOwnAuth({
   tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
+  session: {
+    ttlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
+  },
 });
 ```
 
-Sign up, sign in, sign out.
+That is your auth layer. Every function in this guide is called on this `auth` instance. Own Auth reads `DATABASE_URL` automatically.
+
+### Sign Up A User
+
+```ts signup.ts
+const { user, session, sessionToken } = await auth.signUpEmailPassword({
+  email: "alice@example.com",
+  password: "her-secret-password",
+  name: "Alice",
+});
+
+// user.id           -> "usr_a1b2c3..."
+// user.email        -> "alice@example.com"
+// user.name         -> "Alice"
+// sessionToken      -> send this to the client securely
+// session.expiresAt -> 2026-08-09T...
+```
+
+The password is hashed before it is stored. Own Auth never saves plain-text passwords. The session is created automatically, so the user is signed in as soon as they sign up.
+
+If the email is already taken, `signUpEmailPassword` throws a typed error you can catch and handle:
+
+```ts signup.ts
+import { AuthError } from "own-auth";
+
+try {
+  const { user, session, sessionToken } = await auth.signUpEmailPassword({
+    email,
+    password,
+    name,
+  });
+} catch (error) {
+  if (error instanceof AuthError && error.code === "email_already_exists") {
+    // Handle the duplicate email.
+  }
+  throw error;
+}
+```
+
+### Sign In
+
+```ts signin.ts
+const { user, session, sessionToken } = await auth.signInEmailPassword({
+  email: "alice@example.com",
+  password: "her-secret-password",
+});
+
+// sessionToken      -> send this to the client securely
+// session.userId    -> "usr_a1b2c3..."
+// session.expiresAt -> 2026-08-09T...
+```
+
+The session token identifies the user on future requests. Send it to the client as a cookie, a header, or however your application handles tokens.
+
+If the credentials are wrong, `signInEmailPassword` throws `AuthError` with the code `invalid_credentials`. The error deliberately does not reveal whether the email or password was wrong.
+
+### Verify A Session
+
+On every authenticated request, verify the session token to identify the user.
+
+```ts session.ts
+const result = await auth.getCurrentSession(sessionToken);
+
+if (!result) {
+  // Not signed in. Return 401.
+}
+
+// result.session.userId -> "usr_a1b2c3..."
+// result.user            -> { id, email, name, ... }
+```
+
+`getCurrentSession` checks the token against the database. If the session is expired or has been revoked, it returns `null`.
+
+### Sign Out
 
 ```ts
-const { user } = await auth.signUpEmailPassword({
-  email: "user@example.com",
-  password: "secure-password",
-  name: "Jane",
-});
-
-const { sessionToken } = await auth.signInEmailPassword({
-  email: "user@example.com",
-  password: "secure-password",
-});
-
-const { user } = await auth.requireCurrentSession(sessionToken);
-
 await auth.signOut(sessionToken);
 ```
 
-That's it. You have working auth.
+The session is revoked immediately. The token stops working on the next request.
+
+### Full Example
+
+Here is everything together in a minimal script. No framework, just plain TypeScript. Swap in Express, Hono, Fastify, or whatever you use.
+
+```ts server.ts
+import { auth } from "./auth";
+
+// Sign up.
+const { sessionToken } = await auth.signUpEmailPassword({
+  email: "alice@example.com",
+  password: "her-secret-password",
+  name: "Alice",
+});
+
+// Send sessionToken to the client as a cookie, header, or another secure value.
+
+// Later, verify the session on an incoming request.
+const result = await auth.getCurrentSession(sessionToken);
+
+if (result) {
+  console.log("Signed in as", result.user.email);
+}
+
+// Sign out.
+await auth.signOut(sessionToken);
+```
+
+That is it. Users, passwords, and sessions are working. Everything is in your Postgres database, under your control.
+
+### What's Next
+
+You have basic email/password auth. Here is where to go next:
+
+**Auth methods**: Add passwordless login with [magic links](https://own-auth.com/docs/magic-links), or phone-based login with [SMS verification](https://own-auth.com/docs/phone-login).
+
+**Sessions**: Learn how [session management](https://own-auth.com/docs/sessions) works, including revoking sessions across devices.
+
+**Organisations**: Add [teams, roles, and invitations](https://own-auth.com/docs/organisations) for multi-tenant applications.
+
+**API access for integrations**: Issue scoped [application API keys](https://own-auth.com/docs/api-keys) for programmatic access to your application's API.
+
+**Email delivery**: Set up your own email provider, or use [Own Auth Delivery](https://own-auth.com/docs/sending-email) to send magic links, verification emails, and invitations without configuring SMTP.
+
+**Security**: Read the [security model](https://own-auth.com/docs/security-model) to understand hashing, token expiry, rate limiting, and audit logs.
+
+**Framework guides**: See integration guides for [Next.js](https://own-auth.com/docs/frameworks/nextjs), [Express](https://own-auth.com/docs/frameworks/express), [Hono](https://own-auth.com/docs/frameworks/hono), and [Fastify](https://own-auth.com/docs/frameworks/fastify).
+
+## Sessions
+
+Sessions are stored in Postgres, tied to a user, and revocable at any time.
+
+### Get The Current Session
+
+```ts session.ts
+const current = await auth.getCurrentSession(sessionToken);
+
+if (!current) {
+  // Not signed in. Return 401.
+}
+
+console.log(current.user.email);
+```
+
+Use `requireCurrentSession` when authentication is required. It throws `AuthError` with the code `invalid_session` when the token cannot be used.
+
+```ts
+const { user, session } = await auth.requireCurrentSession(sessionToken);
+```
+
+### List Sessions
+
+```ts
+const sessions = await auth.listSessions({
+  actorUserId: current.user.id,
+});
+```
+
+Session records include creation, expiry, activity, and revocation state.
+
+### Revoke Sessions
+
+```ts
+await auth.signOut(sessionToken);
+
+await auth.revokeSession({
+  sessionToken,
+  sessionId,
+});
+
+const revokedCount = await auth.revokeAllSessions({
+  actorUserId: current.user.id,
+});
+```
+
+Revocation takes effect immediately.
+
+### Configure Expiry
+
+```ts auth.ts
+export const auth = createOwnAuth({
+  tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
+  session: {
+    ttlMs: 30 * 24 * 60 * 60 * 1000,   // 30 days
+    idleTtlMs: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+});
+```
 
 ## Providers
 
@@ -224,16 +422,21 @@ const { rawKey } = await auth.createApiKey({
 Verify incoming requests.
 
 ```ts
-const { apiKey, user, organisation } = await auth.verifyApiKey(
-  request.headers.authorization,
-  ["users:read"]
-);
+const authorization = request.headers.authorization ?? "";
+const rawKey = authorization.replace(/^Bearer\s+/i, "");
+
+const { apiKey, user, organisation } = await auth.verifyApiKey(rawKey, [
+  "users:read",
+]);
 ```
 
 Revoke a key.
 
 ```ts
-await auth.revokeApiKey(apiKey.keyPrefix, user.id);
+await auth.revokeApiKey({
+  keyPrefix: apiKey.keyPrefix,
+  actorUserId: currentUser.id,
+});
 ```
 
 ## Organisations
@@ -246,6 +449,11 @@ const { organisation } = await auth.createOrganisation({
   ownerUserId: user.id,
 });
 
+const currentOrganisation = await auth.getOrganisation({
+  organisationId: organisation.id,
+  actorUserId: currentUser.id,
+});
+
 await auth.inviteMember({
   organisationId: organisation.id,
   email: "teammate@example.com",
@@ -253,7 +461,15 @@ await auth.inviteMember({
   role: "member",
 });
 
-const { user, member } = await auth.acceptInvitation({ token });
+const { member } = await auth.acceptInvite({
+  token,
+  userId: signedInUser.id,
+});
+
+await auth.deleteOrganisation({
+  organisationId: organisation.id,
+  actorUserId: user.id,
+});
 ```
 
 ### Roles and Permissions
@@ -272,14 +488,14 @@ await auth.requirePermission(orgId, userId, "manage_api_keys");
 ```ts
 await auth.changeMemberRole({
   organisationId: orgId,
-  memberId: member.id,
+  userId: targetUser.id,
   role: "admin",
   actorUserId: currentUser.id,
 });
 
 await auth.removeMember({
   organisationId: orgId,
-  memberId: member.id,
+  userId: targetUser.id,
   actorUserId: currentUser.id,
 });
 ```
@@ -290,8 +506,8 @@ Every auth action is logged automatically. Sign ups, sign ins, password resets, 
 
 ```ts
 const events = await auth.listAuditEvents({
-  userId: user.id,
   organisationId: org.id,
+  actorUserId: currentUser.id,
 });
 ```
 
@@ -368,24 +584,26 @@ psql "$DATABASE_URL" -f own-auth.sql
 
 ## Method Reference
 
+### Methods
+
 | Area | Methods |
 |---|---|
-| **Users** | `createUser` `signUpEmailPassword` `signInEmailPassword` |
-| **Sessions** | `getCurrentSession` `requireCurrentSession` `signOut` `revokeAllSessions` |
+| **Users** | `createUser` `signUpEmailPassword` `signInEmailPassword` `disableUser` `enableUser` |
+| **Sessions** | `getCurrentSession` `requireCurrentSession` `signOut` `revokeSession` `revokeAllSessions` `listSessions` |
 | **Magic Links** | `requestMagicLink` `verifyMagicLink` |
 | **External Providers** | `signInWithExternalProvider` |
 | **Email Verification** | `requestEmailVerification` `verifyEmail` |
 | **Passwords** | `requestPasswordReset` `resetPassword` `changePassword` |
 | **SMS OTP** | `requestSmsOtp` `verifySmsOtp` |
-| **API Keys** | `createApiKey` `verifyApiKey` `revokeApiKey` |
-| **Organisations** | `createOrganisation` `updateOrganisation` |
-| **Members & Invites** | `inviteMember` `acceptInvitation` `changeMemberRole` `removeMember` |
+| **API Keys** | `createApiKey` `verifyApiKey` `revokeApiKey` `listApiKeys` |
+| **Organisations** | `createOrganisation` `getOrganisation` `updateOrganisation` `deleteOrganisation` `listOrganisations` |
+| **Members & Invites** | `getMember` `listMembers` `inviteMember` `acceptInvite` `revokeInvitation` `listInvitations` `changeMemberRole` `removeMember` |
 | **Permissions** | `checkPermission` `requirePermission` |
-| **Audit Logs** | `listAuditEvents` |
+| **Audit Logs** | `listAuditEvents` `cleanupAuditLogs` |
 
 ## Security
 
-- Passwords hashed with scrypt
+- New passwords are hashed with Argon2id; legacy scrypt hashes are upgraded after a successful sign in
 - Session tokens, magic links, reset tokens, SMS codes, and API keys hashed before storage
 - Single-use tokens with expiry
 - Rate limiting on all sensitive flows
@@ -396,6 +614,10 @@ psql "$DATABASE_URL" -f own-auth.sql
 
 - [Installation](./docs/installation.md)
 - [Security Model](./docs/security-model.md)
+- [Next.js](./docs/frameworks/nextjs.md)
+- [Express](./docs/frameworks/express.md)
+- [Hono](./docs/frameworks/hono.md)
+- [Fastify](./docs/frameworks/fastify.md)
 - [Security Policy](./SECURITY.md)
 - [Contributing](./CONTRIBUTING.md)
 

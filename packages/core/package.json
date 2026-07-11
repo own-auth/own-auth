@@ -31,6 +31,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "migrations"
   ],
   "publishConfig": {
@@ -46,7 +47,9 @@
       "default": "./dist/postgres/index.js"
     },
     "./migrations/001_initial.sql": "./migrations/001_initial.sql",
-    "./migrations/002_external_providers.sql": "./migrations/002_external_providers.sql"
+    "./migrations/002_external_providers.sql": "./migrations/002_external_providers.sql",
+    "./docs/installation.md": "./docs/installation.md",
+    "./docs/security-model.md": "./docs/security-model.md"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",

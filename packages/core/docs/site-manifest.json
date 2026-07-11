@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "title": "Get Started",
+      "pages": [
+        {
+          "title": "Introduction",
+          "description": "Own Auth is an auth library that runs in your backend and stores everything in your Postgres database. Users, sessions, magic links, phone codes, API keys, and organisations are all in tables you own, on a server you control.",
+          "href": "/docs",
+          "slug": [],
+          "source": "docs/introduction.md"
+        },
+        {
+          "title": "Quickstart",
+          "description": "Get your first login working in under five minutes. You need Node.js 18+ and a Postgres database.",
+          "href": "/docs/quickstart",
+          "slug": ["quickstart"],
+          "source": "README.md",
+          "section": "Quickstart"
+        },
+        {
+          "title": "Installation",
+          "description": "Install Own Auth, configure Postgres, and create the required database tables.",
+          "href": "/docs/installation",
+          "slug": ["installation"],
+          "source": "docs/installation.md"
+        },
+        {
+          "title": "Configuration",
+          "description": "Create an auth.ts file in your project. This is the single entry point for all auth operations.",
+          "href": "/docs/configuration",
+          "slug": ["configuration"],
+          "source": "docs/configuration.md"
+        }
+      ]
+    },
+    {
+      "title": "Authentication",
+      "pages": [
+        {
+          "title": "Passwords",
+          "description": "Email and password authentication. The most common auth method. Users sign up with an email and a password, and sign in with the same credentials.",
+          "href": "/docs/passwords",
+          "slug": ["passwords"],
+          "source": "docs/passwords.md"
+        },
+        {
+          "title": "Magic Links",
+          "description": "Passwordless sign-in via email. The user enters their email, receives a link, clicks it, and they are in. No password to remember, no password to steal.",
+          "href": "/docs/magic-links",
+          "slug": ["magic-links"],
+          "source": "docs/magic-links.md"
+        },
+        {
+          "title": "Phone Login",
+          "description": "Sign in with a phone number and a one-time SMS code. The user enters their phone number, receives a text with a 6-digit code, types it in, and they are signed in.",
+          "href": "/docs/phone-login",
+          "slug": ["phone-login"],
+          "source": "docs/phone-login.md"
+        },
+        {
+          "title": "Email Verification",
+          "description": "Confirm that a user owns the email address they signed up with. After sign-up, send a verification email. The user opens the link and their email is marked as verified.",
+          "href": "/docs/email-verification",
+          "slug": ["email-verification"],
+          "source": "docs/email-verification.md"
+        },
+        {
+          "title": "Password Reset",
+          "description": "Let users set a new password when they have forgotten their current one. The user enters their email, receives a reset link, opens it, and enters a new password.",
+          "href": "/docs/password-reset",
+          "slug": ["password-reset"],
+          "source": "docs/password-reset.md"
+        }
+      ]
+    },
+    {
+      "title": "Sessions",
+      "pages": [
+        {
+          "title": "Session Management",
+          "description": "Sessions are how users stay signed in between requests. When a user signs in, Own Auth creates a session and returns a token. That token is sent with each later request to identify the user.",
+          "href": "/docs/sessions",
+          "slug": ["sessions"],
+          "source": "docs/sessions/management.md"
+        }
+      ]
+    },
+    {
+      "title": "Organisations",
+      "pages": [
+        {
+          "title": "Organisations",
+          "description": "Organisations are teams, workspaces, or tenants. A user can belong to multiple organisations. Each organisation has members with roles. Built in from the start, not something you bolt on later.",
+          "href": "/docs/organisations",
+          "slug": ["organisations"],
+          "source": "docs/organisations/overview.md"
+        },
+        {
+          "title": "Members",
+          "description": "Members are users who belong to an organisation. Each member has a role that determines what they can do within that organisation.",
+          "href": "/docs/organisations/members",
+          "slug": ["organisations", "members"],
+          "source": "docs/organisations/members.md"
+        },
+        {
+          "title": "Roles",
+          "description": "Use built-in organisation roles and permission checks.",
+          "href": "/docs/organisations/roles",
+          "slug": ["organisations", "roles"],
+          "source": "docs/organisations/roles.md"
+        },
+        {
+          "title": "Invites",
+          "description": "Invite users to join an organisation by email. The invited person receives an email containing a single-use link and accepts the organisation membership through the application.",
+          "href": "/docs/organisations/invites",
+          "slug": ["organisations", "invites"],
+          "source": "docs/organisations/invites.md"
+        }
+      ]
+    },
+    {
+      "title": "API Keys",
+      "pages": [
+        {
+          "title": "API Keys",
+          "description": "Let users of an application create API keys to access that application's API programmatically. Keys are shown once at creation, stored hashed, scoped, and revocable at any time.",
+          "href": "/docs/api-keys",
+          "slug": ["api-keys"],
+          "source": "docs/api-keys/overview.md"
+        }
+      ]
+    },
+    {
+      "title": "Security",
+      "pages": [
+        {
+          "title": "Rate Limiting",
+          "description": "Own Auth rate-limits sensitive authentication operations automatically. With the default Postgres setup, there is no middleware to enable and no separate rate-limit service to configure.",
+          "href": "/docs/rate-limiting",
+          "slug": ["rate-limiting"],
+          "source": "docs/security/rate-limiting.md"
+        },
+        {
+          "title": "Audit Logs",
+          "description": "Audit logs record who performed an authentication action, who or what it affected, when it happened, and the available request context. Own Auth writes these events automatically as part of each supported operation.",
+          "href": "/docs/audit-logs",
+          "slug": ["audit-logs"],
+          "source": "docs/security/audit-logs.md"
+        },
+        {
+          "title": "Security Model",
+          "description": "How Own Auth protects an authentication system. This page covers the security decisions built into the library, including what is hashed, what expires, what is rate-limited, and what remains the application's responsibility.",
+          "href": "/docs/security-model",
+          "slug": ["security-model"],
+          "source": "docs/security-model.md"
+        }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        {
+          "title": "Auth API",
+          "description": "Methods exposed by an Own Auth instance.",
+          "href": "/docs/auth-api",
+          "slug": ["auth-api"],
+          "source": "README.md",
+          "section": "Method Reference"
+        }
+      ]
+    },
+    {
+      "title": "Frameworks",
+      "pages": [
+        {
+          "title": "Next.js",
+          "description": "Use Own Auth from a Next.js App Router route handler.",
+          "href": "/docs/frameworks/nextjs",
+          "slug": ["frameworks", "nextjs"],
+          "source": "docs/frameworks/nextjs.md"
+        },
+        {
+          "title": "Express",
+          "description": "Use Own Auth from an Express route handler.",
+          "href": "/docs/frameworks/express",
+          "slug": ["frameworks", "express"],
+          "source": "docs/frameworks/express.md"
+        },
+        {
+          "title": "Hono",
+          "description": "Use Own Auth from a Hono route handler.",
+          "href": "/docs/frameworks/hono",
+          "slug": ["frameworks", "hono"],
+          "source": "docs/frameworks/hono.md"
+        },
+        {
+          "title": "Fastify",
+          "description": "Use Own Auth from a Fastify route handler.",
+          "href": "/docs/frameworks/fastify",
+          "slug": ["frameworks", "fastify"],
+          "source": "docs/frameworks/fastify.md"
+        }
+      ]
+    }
+  ]
+}

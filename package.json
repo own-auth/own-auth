@@ -27,8 +27,10 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "build": "pnpm -r build",
+    "docs:check": "node scripts/sync-package-docs.mjs --check",
+    "docs:sync": "node scripts/sync-package-docs.mjs",
     "release:check-clean": "node scripts/release.mjs check-clean",
-    "release:check": "pnpm build && pnpm test && pnpm --filter own-auth test:integration:required && pnpm --filter own-auth pack:check",
+    "release:check": "pnpm docs:check && pnpm build && pnpm test && pnpm --filter own-auth test:integration:required && pnpm --filter own-auth pack:check",
     "release:publish": "pnpm run release:check-clean && pnpm run release:check && pnpm --filter own-auth publish:npm && pnpm run release:tag",
     "release:tag": "node scripts/release.mjs tag",
     "test": "pnpm -r test",
