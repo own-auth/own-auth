@@ -213,6 +213,56 @@ export class InMemoryAuthStorage implements AuthStorage {
     return clone(updated);
   }
 
+  async deleteOrganisation(id: string): Promise<boolean> {
+    if (!this.organisations.delete(id)) {
+      return false;
+    }
+
+    const deletedApiKeyIds = new Set<string>();
+
+    for (const [tokenId, token] of this.tokens) {
+      if (token.organisationId === id) {
+        this.tokens.delete(tokenId);
+      }
+    }
+
+    for (const [apiKeyId, apiKey] of this.apiKeys) {
+      if (apiKey.organisationId === id) {
+        deletedApiKeyIds.add(apiKeyId);
+        this.apiKeys.delete(apiKeyId);
+      }
+    }
+
+    for (const [memberId, member] of this.members) {
+      if (member.organisationId === id) {
+        this.members.delete(memberId);
+      }
+    }
+
+    for (const [invitationId, invitation] of this.invitations) {
+      if (invitation.organisationId === id) {
+        this.invitations.delete(invitationId);
+      }
+    }
+
+    for (const [eventId, event] of this.auditEvents) {
+      if (
+        event.organisationId === id ||
+        (event.apiKeyId && deletedApiKeyIds.has(event.apiKeyId))
+      ) {
+        this.auditEvents.set(eventId, {
+          ...event,
+          organisationId: event.organisationId === id ? null : event.organisationId,
+          apiKeyId: event.apiKeyId && deletedApiKeyIds.has(event.apiKeyId)
+            ? null
+            : event.apiKeyId
+        });
+      }
+    }
+
+    return true;
+  }
+
   async getOrganisationById(id: string): Promise<Organisation | null> {
     const organisation = this.organisations.get(id);
     return organisation ? clone(organisation) : null;
@@ -309,6 +359,13 @@ export class InMemoryAuthStorage implements AuthStorage {
     return invitation ? clone(invitation) : null;
   }
 
+  async getInvitationByTokenId(tokenId: string): Promise<Invitation | null> {
+    const invitation = [...this.invitations.values()].find(
+      (candidate) => candidate.tokenId === tokenId
+    );
+    return invitation ? clone(invitation) : null;
+  }
+
   async getPendingInvitationByOrganisationAndEmail(
     organisationId: string,
     email: string
@@ -353,5 +410,18 @@ export class InMemoryAuthStorage implements AuthStorage {
       })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map((event) => clone(event));
+  }
+
+  async deleteAuditEventsBefore(olderThan: Date): Promise<number> {
+    let deleted = 0;
+
+    for (const [id, event] of this.auditEvents) {
+      if (event.createdAt < olderThan) {
+        this.auditEvents.delete(id);
+        deleted += 1;
+      }
+    }
+
+    return deleted;
   }
 }

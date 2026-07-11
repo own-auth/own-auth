@@ -144,6 +144,7 @@ create index if not exists own_auth_organisation_members_user_idx
 
 create table if not exists own_auth_invitations (
   id text primary key,
+  token_id text,
   organisation_id text not null references own_auth_organisations(id) on delete cascade,
   email text,
   phone text,
@@ -161,6 +162,20 @@ create table if not exists own_auth_invitations (
   constraint own_auth_invitations_contact_check
     check (email is not null or phone is not null)
 );
+
+alter table own_auth_invitations
+  add column if not exists token_id text;
+
+alter table own_auth_invitations
+  drop constraint if exists own_auth_invitations_token_id_fkey;
+
+alter table own_auth_invitations
+  add constraint own_auth_invitations_token_id_fkey
+  foreign key (token_id) references own_auth_tokens(id) on delete set null;
+
+create unique index if not exists own_auth_invitations_token_idx
+  on own_auth_invitations (token_id)
+  where token_id is not null;
 
 create index if not exists own_auth_invitations_pending_email_idx
   on own_auth_invitations (organisation_id, lower(email), status, created_at desc)

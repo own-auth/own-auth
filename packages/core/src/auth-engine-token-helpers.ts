@@ -44,6 +44,20 @@ export async function consumeToken(
   rawToken: string,
   type: TokenType
 ): Promise<AuthToken> {
+  const token = await getUsableToken(ctx, rawToken, type);
+
+  const updatedToken = await ctx.storage.updateToken(token.id, {
+    usedAt: new Date()
+  });
+
+  return updatedToken ?? token;
+}
+
+export async function getUsableToken(
+  ctx: AuthEngineContext,
+  rawToken: string,
+  type: TokenType
+): Promise<AuthToken> {
   const token = await ctx.storage.getTokenByHash(hash(ctx, rawToken), type);
 
   if (!token) {
@@ -58,11 +72,7 @@ export async function consumeToken(
     throw new AuthError("expired_token", "Token has expired", 401);
   }
 
-  const updatedToken = await ctx.storage.updateToken(token.id, {
-    usedAt: new Date()
-  });
-
-  return updatedToken ?? token;
+  return token;
 }
 
 export async function hashPasswordInput(

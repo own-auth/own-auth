@@ -1,22 +1,30 @@
 import { AuthError } from "./errors.js";
 import { createId } from "./crypto.js";
 import { isExpired, normalizeEmail } from "./normalise.js";
-import type { Invitation, OrganisationMember, User } from "./types.js";
-import type {
-  AcceptInvitationInput,
-  InvitationResult,
-  InviteMemberInput,
-  RevokeInvitationInput
+import type { Invitation, OrganisationMember } from "./types.js";
+import {
+  hour,
+  type AcceptInviteInput,
+  type AcceptInviteResult,
+  type InvitationResult,
+  type InviteMemberInput,
+  type ListInvitationsInput,
+  type RevokeInvitationInput
 } from "./auth-engine-types.js";
 import {
   audit,
   buildUrl,
   consumeToken,
+  getUsableToken,
   issueToken,
+  rateLimit,
+  requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
-import { createUser } from "./auth-engine-users.js";
-import { requirePermission } from "./auth-engine-organisations.js";
+import {
+  requireActiveOrganisation,
+  requirePermission
+} from "./auth-engine-organisations.js";
 
 export async function inviteMember(
   ctx: AuthEngineContext,
@@ -25,25 +33,50 @@ export async function inviteMember(
   await requirePermission(ctx, input.organisationId, input.invitedByUserId, "invite_members");
 
   const email = normalizeEmail(input.email);
+  const invitedUser = await ctx.storage.getUserByEmail(email);
+  if (invitedUser) {
+    const existingMember = await ctx.storage.getOrganisationMember(
+      input.organisationId,
+      invitedUser.id
+    );
+    if (existingMember?.status === "active") {
+      throw new AuthError("already_member", "User is already a member", 409);
+    }
+  }
+
+  const existingInvitation = await ctx.storage.getPendingInvitationByOrganisationAndEmail(
+    input.organisationId,
+    email
+  );
+  if (existingInvitation) {
+    if (!isExpired(existingInvitation.expiresAt)) {
+      throw new AuthError("invite_exists", "A pending invitation already exists", 409);
+    }
+    await ctx.storage.updateInvitation(existingInvitation.id, { status: "expired" });
+  }
+
+  await rateLimit(ctx, "organisation-invite", input.organisationId, 10, hour);
+
   const now = new Date();
+  const issued = await issueToken(ctx, "organisation_invite", {
+    userId: null,
+    email,
+    organisationId: input.organisationId,
+    ttlMs: ctx.tokenTtls.organisation_invite
+  });
   const invitation = await ctx.storage.createInvitation({
     id: createId("inv"),
+    tokenId: issued.token.id,
     organisationId: input.organisationId,
     email,
     phone: null,
     role: input.role ?? "member",
     invitedByUserId: input.invitedByUserId,
     status: "pending",
-    expiresAt: new Date(now.getTime() + ctx.tokenTtls.organisation_invite),
+    expiresAt: issued.token.expiresAt,
     acceptedAt: null,
     revokedAt: null,
     createdAt: now
-  });
-  const issued = await issueToken(ctx, "organisation_invite", {
-    userId: null,
-    email,
-    organisationId: input.organisationId,
-    ttlMs: ctx.tokenTtls.organisation_invite
   });
   const url = buildUrl(ctx, "/auth/invitations/accept", { token: issued.rawToken });
 
@@ -72,25 +105,38 @@ export async function inviteMember(
   return result;
 }
 
-export async function acceptInvitation(
+export async function acceptInvite(
   ctx: AuthEngineContext,
-  input: AcceptInvitationInput
-): Promise<{ invitation: Invitation; user: User; member: OrganisationMember }> {
-  const token = await consumeToken(ctx, input.token, "organisation_invite");
+  input: AcceptInviteInput
+): Promise<AcceptInviteResult> {
+  if (!input.userId) {
+    throw new AuthError("invalid_session", "Sign in to accept the invitation", 401);
+  }
+
+  const token = await getUsableToken(ctx, input.token, "organisation_invite");
   const organisationId = token.organisationId;
   if (!organisationId) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
+  const organisation = await requireActiveOrganisation(ctx, organisationId);
 
-  const pendingInvitation = token.email
-    ? await ctx.storage.getPendingInvitationByOrganisationAndEmail(organisationId, token.email)
-    : null;
-  if (!pendingInvitation) {
-    throw new AuthError("invitation_not_found", "Invitation not found", 404);
+  const user = await requireActiveUser(ctx, input.userId);
+
+  if (!token.email || user.email !== token.email) {
+    throw new AuthError("permission_denied", "Invitation does not belong to this user", 403);
+  }
+
+  const pendingInvitation = await ctx.storage.getInvitationByTokenId(token.id);
+  if (
+    !pendingInvitation ||
+    pendingInvitation.organisationId !== organisationId ||
+    pendingInvitation.email !== token.email
+  ) {
+    throw new AuthError("invalid_token", "Invalid token", 401);
   }
 
   if (pendingInvitation.status !== "pending") {
-    throw new AuthError("invitation_not_pending", "Invitation is not pending", 409);
+    throw new AuthError("invalid_token", "Invalid token", 401);
   }
 
   if (isExpired(pendingInvitation.expiresAt)) {
@@ -98,22 +144,7 @@ export async function acceptInvitation(
     throw new AuthError("expired_token", "Invitation has expired", 401);
   }
 
-  let user = input.userId ? await ctx.storage.getUserById(input.userId) : null;
-  if (!user && token.email) {
-    user = await ctx.storage.getUserByEmail(token.email);
-  }
-
-  if (!user && token.email) {
-    user = await createUser(ctx, { email: token.email });
-    user = (await ctx.storage.updateUser(user.id, {
-      emailVerifiedAt: new Date(),
-      updatedAt: new Date()
-    })) ?? user;
-  }
-
-  if (!user) {
-    throw new AuthError("user_not_found", "User not found", 404);
-  }
+  await consumeToken(ctx, input.token, "organisation_invite");
 
   const now = new Date();
   let member = await ctx.storage.getOrganisationMember(organisationId, user.id);
@@ -153,7 +184,7 @@ export async function acceptInvitation(
     metadata: { invitationId: invitation.id }
   });
 
-  return { invitation, user, member };
+  return { organisation, member };
 }
 
 export async function revokeInvitation(
@@ -165,17 +196,20 @@ export async function revokeInvitation(
     throw new AuthError("invitation_not_found", "Invitation not found", 404);
   }
 
+  await requirePermission(ctx, invitation.organisationId, input.actorUserId, "invite_members");
+
   if (invitation.status !== "pending") {
     throw new AuthError("invitation_not_pending", "Invitation is not pending", 409);
   }
-
-  await requirePermission(ctx, invitation.organisationId, input.actorUserId, "invite_members");
 
   const now = new Date();
   const updatedInvitation = await ctx.storage.updateInvitation(input.invitationId, {
     status: "revoked",
     revokedAt: now
   });
+  if (invitation.tokenId) {
+    await ctx.storage.updateToken(invitation.tokenId, { usedAt: now });
+  }
 
   await audit(ctx, {
     eventType: "invite.revoked",
@@ -190,7 +224,13 @@ export async function revokeInvitation(
 
 export async function listInvitations(
   ctx: AuthEngineContext,
-  organisationId: string
+  input: ListInvitationsInput
 ): Promise<Invitation[]> {
-  return ctx.storage.listInvitationsByOrganisationId(organisationId);
+  await requirePermission(
+    ctx,
+    input.organisationId,
+    input.actorUserId,
+    "invite_members"
+  );
+  return ctx.storage.listInvitationsByOrganisationId(input.organisationId);
 }

@@ -1,5 +1,5 @@
 import type {
-  ApiKey,
+  ApiKeyDetails,
   Invitation,
   JsonRecord,
   Organisation,
@@ -58,6 +58,12 @@ export interface ChangePasswordInput {
   request?: RequestContext;
 }
 
+export interface RevokeSessionInput {
+  sessionToken: string;
+  sessionId: string;
+  request?: RequestContext;
+}
+
 export interface SignInWithExternalProviderInput {
   provider: ExternalAccountProvider;
   providerAccountId: string;
@@ -113,17 +119,16 @@ export interface SmsOtpVerificationResult {
 
 export interface CreateApiKeyInput {
   name: string;
-  userId?: string;
   organisationId?: string;
   scopes?: string[];
   expiresAt?: Date;
   metadata?: JsonRecord;
-  actorUserId?: string;
+  actorUserId: string;
   request?: RequestContext;
 }
 
 export interface CreatedApiKey {
-  apiKey: ApiKey;
+  apiKey: ApiKeyDetails;
   rawKey: string;
 }
 
@@ -135,12 +140,34 @@ export interface CreateOrganisationInput {
   request?: RequestContext;
 }
 
+export interface GetOrganisationInput {
+  organisationId: string;
+  actorUserId: string;
+}
+
+export interface DeleteOrganisationInput {
+  organisationId: string;
+  actorUserId: string;
+  request?: RequestContext;
+}
+
 export interface InviteMemberInput {
   organisationId: string;
   email: string;
   role?: OrganisationRole;
   invitedByUserId: string;
   request?: RequestContext;
+}
+
+export interface ListMembersInput {
+  organisationId: string;
+  actorUserId: string;
+}
+
+export interface GetMemberInput {
+  organisationId: string;
+  userId: string;
+  actorUserId: string;
 }
 
 export interface InvitationResult {
@@ -157,15 +184,20 @@ export interface UpdateOrganisationInput {
   request?: RequestContext;
 }
 
-export interface AcceptInvitationInput {
+export interface AcceptInviteInput {
   token: string;
-  userId?: string;
+  userId: string;
   request?: RequestContext;
+}
+
+export interface AcceptInviteResult {
+  organisation: Organisation;
+  member: OrganisationMember;
 }
 
 export interface ChangeMemberRoleInput {
   organisationId: string;
-  memberId: string;
+  userId: string;
   role: OrganisationRole;
   actorUserId: string;
   request?: RequestContext;
@@ -173,7 +205,7 @@ export interface ChangeMemberRoleInput {
 
 export interface RemoveMemberInput {
   organisationId: string;
-  memberId: string;
+  userId: string;
   actorUserId: string;
   request?: RequestContext;
 }
@@ -190,13 +222,42 @@ export interface RevokeInvitationInput {
   request?: RequestContext;
 }
 
-export interface ApiKeyListFilter {
-  userId?: string;
+export interface ListInvitationsInput {
+  organisationId: string;
+  actorUserId: string;
+}
+
+export interface ListApiKeysInput {
+  actorUserId: string;
   organisationId?: string;
 }
 
-export interface AuditEventFilter {
+export interface RevokeApiKeyInput {
+  keyPrefix: string;
+  actorUserId: string;
+  request?: RequestContext;
+}
+
+export interface ListAuditEventsInput {
+  actorUserId: string;
   userId?: string;
   organisationId?: string;
   apiKeyId?: string;
+}
+
+export interface CleanupAuditLogsInput {
+  olderThan: Date;
+}
+
+export interface ListSessionsInput {
+  actorUserId: string;
+}
+
+export interface RevokeAllSessionsInput {
+  actorUserId: string;
+  request?: RequestContext;
+}
+
+export interface ListOrganisationsInput {
+  actorUserId: string;
 }

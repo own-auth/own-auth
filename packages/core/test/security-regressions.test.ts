@@ -235,7 +235,9 @@ describe("OwnAuth security regressions", () => {
       password: "correct-horse"
     });
 
-    await expect(auth.revokeAllSessions(signup.user.id, "security_event")).resolves.toBe(2);
+    await expect(
+      auth.revokeAllSessions({ actorUserId: signup.user.id })
+    ).resolves.toBe(2);
     await expect(auth.getCurrentSession(signup.sessionToken)).resolves.toBeNull();
     await expect(auth.getCurrentSession(signin.sessionToken)).resolves.toBeNull();
   });
@@ -447,7 +449,10 @@ describe("OwnAuth security regressions", () => {
       code: "api_key_invalid"
     });
 
-    await auth.revokeApiKey(created.apiKey.keyPrefix, owner.user.id);
+    await auth.revokeApiKey({
+      keyPrefix: created.apiKey.keyPrefix,
+      actorUserId: owner.user.id
+    });
     await expect(auth.verifyApiKey(created.rawKey)).rejects.toMatchObject({
       code: "api_key_revoked"
     });
@@ -461,6 +466,32 @@ describe("OwnAuth security regressions", () => {
     await expect(auth.verifyApiKey(expired.rawKey)).rejects.toMatchObject({
       code: "api_key_expired"
     });
+  });
+
+  it("does not expose API key hashes through public methods", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+    const created = await auth.createApiKey({
+      name: "Private hash",
+      organisationId: organisation.id,
+      actorUserId: owner.user.id
+    });
+
+    const [listed] = await auth.listApiKeys({
+      organisationId: organisation.id,
+      actorUserId: owner.user.id
+    });
+    const verified = await auth.verifyApiKey(created.rawKey);
+    const revoked = await auth.revokeApiKey({
+      keyPrefix: created.apiKey.keyPrefix,
+      actorUserId: owner.user.id
+    });
+    const stored = await auth.storage.getApiKeyByPrefix(created.apiKey.keyPrefix);
+
+    expect(created.apiKey).not.toHaveProperty("keyHash");
+    expect(listed).not.toHaveProperty("keyHash");
+    expect(verified.apiKey).not.toHaveProperty("keyHash");
+    expect(revoked).not.toHaveProperty("keyHash");
+    expect(stored?.keyHash).toBeTruthy();
   });
 
   it("supports wildcard API key scopes and records last-used time", async () => {
@@ -479,6 +510,67 @@ describe("OwnAuth security regressions", () => {
 
     expect(verified.apiKey.lastUsedAt).toBeInstanceOf(Date);
     expect(verified.organisation?.id).toBe(organisation.id);
+  });
+
+  it("keeps user-scoped resources bound to the acting user", async () => {
+    const { auth } = createHarness();
+    const first = await auth.signUpEmailPassword({
+      email: "first-owner@example.com",
+      password: "correct-horse"
+    });
+    const second = await auth.signUpEmailPassword({
+      email: "second-owner@example.com",
+      password: "correct-horse"
+    });
+    const firstOrganisation = await auth.createOrganisation({
+      name: "First Organisation",
+      ownerUserId: first.user.id
+    });
+    const secondOrganisation = await auth.createOrganisation({
+      name: "Second Organisation",
+      ownerUserId: second.user.id
+    });
+    const firstKey = await auth.createApiKey({
+      name: "First user key",
+      actorUserId: first.user.id
+    });
+
+    await expect(
+      auth.listApiKeys({ actorUserId: first.user.id })
+    ).resolves.toEqual([expect.objectContaining({ id: firstKey.apiKey.id })]);
+    await expect(
+      auth.listApiKeys({ actorUserId: second.user.id })
+    ).resolves.toEqual([]);
+    await expect(
+      auth.revokeApiKey({
+        keyPrefix: firstKey.apiKey.keyPrefix,
+        actorUserId: second.user.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.disableUser({
+        userId: first.user.id,
+        actorUserId: second.user.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.listAuditEvents({
+        actorUserId: second.user.id,
+        userId: first.user.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+
+    const secondSessions = await auth.listSessions({ actorUserId: second.user.id });
+    expect(secondSessions.every((session) => session.userId === second.user.id)).toBe(true);
+    await expect(
+      auth.listOrganisations({ actorUserId: second.user.id })
+    ).resolves.toEqual([expect.objectContaining({ id: secondOrganisation.organisation.id })]);
+    await expect(
+      auth.getOrganisation({
+        organisationId: firstOrganisation.organisation.id,
+        actorUserId: second.user.id
+      })
+    ).rejects.toMatchObject({ code: "organisation_not_found" });
   });
 
   it("creates unique organisation slugs", async () => {
@@ -503,86 +595,279 @@ describe("OwnAuth security regressions", () => {
 
   it("denies organisation actions for members without the required permission", async () => {
     const { auth, owner, organisation } = await createOwnerWithOrg();
+    const memberUser = await auth.createUser({ email: "member@example.com" });
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
       invitedByUserId: owner.user.id,
       email: "member@example.com",
       role: "member"
     });
-    const accepted = await auth.acceptInvitation({ token: invite.token ?? "" });
+    await auth.acceptInvite({ token: invite.token ?? "", userId: memberUser.id });
 
     await expect(
       auth.createApiKey({
         name: "Member key",
         organisationId: organisation.id,
-        actorUserId: accepted.user.id
+        actorUserId: memberUser.id
       })
     ).rejects.toMatchObject({ code: "permission_denied" });
     await expect(
       auth.updateOrganisation(organisation.id, {
-        actorUserId: accepted.user.id,
+        actorUserId: memberUser.id,
         name: "Renamed"
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.inviteMember({
+        organisationId: organisation.id,
+        invitedByUserId: memberUser.id,
+        email: "another-member@example.com"
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.listInvitations({
+        organisationId: organisation.id,
+        actorUserId: memberUser.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.listApiKeys({
+        organisationId: organisation.id,
+        actorUserId: memberUser.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(
+      auth.listAuditEvents({
+        organisationId: organisation.id,
+        actorUserId: memberUser.id
       })
     ).rejects.toMatchObject({ code: "permission_denied" });
   });
 
-  it("prevents unsafe owner role changes and owner removal", async () => {
-    const { auth, owner, organisation, ownerMembership } = await createOwnerWithOrg();
+  it("prevents demoting or removing the last owner", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
 
     await expect(
       auth.changeMemberRole({
         organisationId: organisation.id,
-        memberId: ownerMembership.id,
+        userId: owner.user.id,
         actorUserId: owner.user.id,
         role: "admin"
       })
-    ).rejects.toMatchObject({ code: "unsafe_owner_removal" });
+    ).rejects.toMatchObject({ code: "last_owner" });
     await expect(
       auth.removeMember({
         organisationId: organisation.id,
-        memberId: ownerMembership.id,
+        userId: owner.user.id,
         actorUserId: owner.user.id
       })
-    ).rejects.toMatchObject({ code: "unsafe_owner_removal" });
+    ).rejects.toMatchObject({ code: "last_owner" });
+  });
+
+  it("transfers ownership when the primary owner is removed", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+    const replacementUser = await auth.createUser({
+      email: "replacement-owner@example.com"
+    });
+    const invite = await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "replacement-owner@example.com",
+      role: "member"
+    });
+    await auth.acceptInvite({ token: invite.token ?? "", userId: replacementUser.id });
+
+    await auth.changeMemberRole({
+      organisationId: organisation.id,
+      userId: replacementUser.id,
+      actorUserId: owner.user.id,
+      role: "owner"
+    });
+    await auth.removeMember({
+      organisationId: organisation.id,
+      userId: owner.user.id,
+      actorUserId: owner.user.id
+    });
+
+    await expect(
+      auth.getOrganisation({
+        organisationId: organisation.id,
+        actorUserId: replacementUser.id
+      })
+    ).resolves.toMatchObject({ ownerUserId: replacementUser.id });
+    await expect(
+      auth.checkPermission(organisation.id, owner.user.id, "manage_organisation")
+    ).resolves.toBe(false);
+  });
+
+  it("does not let an admin remove an owner", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+    const adminUser = await auth.createUser({ email: "admin-owner-check@example.com" });
+    const invite = await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "admin-owner-check@example.com",
+      role: "admin"
+    });
+    await auth.acceptInvite({ token: invite.token ?? "", userId: adminUser.id });
+
+    await expect(
+      auth.removeMember({
+        organisationId: organisation.id,
+        userId: owner.user.id,
+        actorUserId: adminUser.id
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+  });
+
+  it("lets admins update organisation settings but not member roles", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+    const adminUser = await auth.createUser({ email: "role-admin@example.com" });
+    const memberUser = await auth.createUser({ email: "role-member@example.com" });
+    const adminInvite = await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "role-admin@example.com",
+      role: "admin"
+    });
+    await auth.acceptInvite({ token: adminInvite.token ?? "", userId: adminUser.id });
+    const memberInvite = await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "role-member@example.com",
+      role: "member"
+    });
+    await auth.acceptInvite({ token: memberInvite.token ?? "", userId: memberUser.id });
+
+    await expect(
+      auth.updateOrganisation(organisation.id, {
+        actorUserId: adminUser.id,
+        name: "Admin Updated Co"
+      })
+    ).resolves.toMatchObject({ name: "Admin Updated Co" });
+
+    await expect(
+      auth.changeMemberRole({
+        organisationId: organisation.id,
+        userId: memberUser.id,
+        actorUserId: adminUser.id,
+        role: "admin"
+      })
+    ).rejects.toMatchObject({ code: "permission_denied" });
   });
 
   it("removes members and drops their permissions", async () => {
     const { auth, owner, organisation } = await createOwnerWithOrg();
+    const adminUser = await auth.createUser({ email: "admin@example.com" });
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
       invitedByUserId: owner.user.id,
       email: "admin@example.com",
       role: "admin"
     });
-    const accepted = await auth.acceptInvitation({ token: invite.token ?? "" });
+    await auth.acceptInvite({ token: invite.token ?? "", userId: adminUser.id });
 
     await auth.removeMember({
       organisationId: organisation.id,
-      memberId: accepted.member.id,
+      userId: adminUser.id,
       actorUserId: owner.user.id
     });
 
     await expect(
-      auth.checkPermission(organisation.id, accepted.user.id, "manage_api_keys")
+      auth.checkPermission(organisation.id, adminUser.id, "manage_api_keys")
     ).resolves.toBe(false);
   });
 
   it("prevents invitation token reuse", async () => {
     const { auth, owner, organisation } = await createOwnerWithOrg();
+    const invitedUser = await auth.createUser({ email: "invite-reuse@example.com" });
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
       invitedByUserId: owner.user.id,
       email: "invite-reuse@example.com"
     });
 
-    await auth.acceptInvitation({ token: invite.token ?? "" });
-    await expect(auth.acceptInvitation({ token: invite.token ?? "" })).rejects.toMatchObject({
-      code: "token_already_used"
+    await auth.acceptInvite({ token: invite.token ?? "", userId: invitedUser.id });
+    await expect(
+      auth.acceptInvite({ token: invite.token ?? "", userId: invitedUser.id })
+    ).rejects.toMatchObject({ code: "token_already_used" });
+  });
+
+  it("does not consume an invitation when the wrong user tries to accept it", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+    const invitedUser = await auth.createUser({ email: "right-invite-user@example.com" });
+    const wrongUser = await auth.createUser({ email: "wrong-invite-user@example.com" });
+    const invite = await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "right-invite-user@example.com"
     });
+
+    await expect(
+      auth.acceptInvite({ token: invite.token ?? "", userId: wrongUser.id })
+    ).rejects.toMatchObject({ code: "permission_denied" });
+
+    await expect(
+      auth.acceptInvite({ token: invite.token ?? "", userId: invitedUser.id })
+    ).resolves.toMatchObject({
+      organisation: { id: organisation.id },
+      member: { userId: invitedUser.id }
+    });
+  });
+
+  it("rejects invitations for active organisation members", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+
+    await expect(
+      auth.inviteMember({
+        organisationId: organisation.id,
+        invitedByUserId: owner.user.id,
+        email: "owner@example.com"
+      })
+    ).rejects.toMatchObject({ code: "already_member" });
+  });
+
+  it("rejects duplicate pending invitations", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+
+    await auth.inviteMember({
+      organisationId: organisation.id,
+      invitedByUserId: owner.user.id,
+      email: "pending-invite@example.com"
+    });
+
+    await expect(
+      auth.inviteMember({
+        organisationId: organisation.id,
+        invitedByUserId: owner.user.id,
+        email: "PENDING-INVITE@example.com"
+      })
+    ).rejects.toMatchObject({ code: "invite_exists" });
+  });
+
+  it("rate limits invitation sends per organisation", async () => {
+    const { auth, owner, organisation } = await createOwnerWithOrg();
+
+    for (let index = 0; index < 10; index += 1) {
+      await auth.inviteMember({
+        organisationId: organisation.id,
+        invitedByUserId: owner.user.id,
+        email: `invite-${index}@example.com`
+      });
+    }
+
+    await expect(
+      auth.inviteMember({
+        organisationId: organisation.id,
+        invitedByUserId: owner.user.id,
+        email: "invite-over-limit@example.com"
+      })
+    ).rejects.toMatchObject({ code: "rate_limited" });
   });
 
   it("marks expired pending invitations as expired", async () => {
     const { auth, storage, owner, organisation } = await createOwnerWithOrg();
+    const invitedUser = await auth.createUser({ email: "expired-invite@example.com" });
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
       invitedByUserId: owner.user.id,
@@ -593,9 +878,9 @@ describe("OwnAuth security regressions", () => {
       expiresAt: new Date(Date.now() - 1)
     });
 
-    await expect(auth.acceptInvitation({ token: invite.token ?? "" })).rejects.toMatchObject({
-      code: "expired_token"
-    });
+    await expect(
+      auth.acceptInvite({ token: invite.token ?? "", userId: invitedUser.id })
+    ).rejects.toMatchObject({ code: "expired_token" });
     await expect(storage.getInvitationById(invite.invitation.id)).resolves.toMatchObject({
       status: "expired"
     });
@@ -610,9 +895,16 @@ describe("OwnAuth security regressions", () => {
     });
     await auth.verifyApiKey(apiKey.rawKey);
 
-    const userEvents = await auth.listAuditEvents({ userId: owner.user.id });
-    const orgEvents = await auth.listAuditEvents({ organisationId: organisation.id });
-    const keyEvents = await auth.listAuditEvents({ apiKeyId: apiKey.apiKey.id });
+    const userEvents = await auth.listAuditEvents({ actorUserId: owner.user.id });
+    const orgEvents = await auth.listAuditEvents({
+      organisationId: organisation.id,
+      actorUserId: owner.user.id
+    });
+    const keyEvents = await auth.listAuditEvents({
+      organisationId: organisation.id,
+      apiKeyId: apiKey.apiKey.id,
+      actorUserId: owner.user.id
+    });
 
     expect(userEvents.map((event) => event.eventType)).toContain("user.signed_up");
     expect(orgEvents.map((event) => event.eventType)).toContain("organisation.created");

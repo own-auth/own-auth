@@ -1,9 +1,15 @@
 import { AuthError } from "./errors.js";
 import { isExpired } from "./normalise.js";
+import type {
+  ListSessionsInput,
+  RevokeAllSessionsInput,
+  RevokeSessionInput
+} from "./auth-engine-types.js";
 import type { CurrentSession, RequestContext, Session } from "./types.js";
 import {
   audit,
   hash,
+  requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 
@@ -85,10 +91,66 @@ export async function signOut(
   });
 }
 
+export async function revokeSession(
+  ctx: AuthEngineContext,
+  input: RevokeSessionInput
+): Promise<Session> {
+  const current = await requireCurrentSession(ctx, input.sessionToken);
+  const sessions = await ctx.storage.listSessionsByUserId(current.user.id);
+  const target = sessions.find((session) => session.id === input.sessionId);
+
+  if (!target) {
+    throw new AuthError("invalid_session", "Session not found", 404);
+  }
+
+  if (target.revokedAt) {
+    return target;
+  }
+
+  const revokedAt = new Date();
+  const revoked = await ctx.storage.updateSession(target.id, {
+    revokedAt,
+    revokeReason: "user_revoked"
+  });
+
+  if (!revoked) {
+    throw new AuthError("invalid_session", "Session not found", 404);
+  }
+
+  await audit(ctx, {
+    eventType: "session.revoked",
+    actorUserId: current.user.id,
+    targetUserId: current.user.id,
+    context: input.request,
+    metadata: {
+      reason: "user_revoked",
+      sessionId: revoked.id
+    }
+  });
+
+  return revoked;
+}
+
 export async function revokeAllSessions(
   ctx: AuthEngineContext,
+  input: RevokeAllSessionsInput
+): Promise<number> {
+  await requireActiveUser(ctx, input.actorUserId);
+  return revokeAllSessionsForUser(
+    ctx,
+    input.actorUserId,
+    "user_revoked_all",
+    input.actorUserId,
+    input.request
+  );
+}
+
+export async function revokeAllSessionsForUser(
+  ctx: AuthEngineContext,
   userId: string,
-  reason = "all_sessions_revoked"
+  reason: string,
+  actorUserId = userId,
+  context?: RequestContext
 ): Promise<number> {
   const sessions = await ctx.storage.listSessionsByUserId(userId);
   const now = new Date();
@@ -106,8 +168,9 @@ export async function revokeAllSessions(
 
   await audit(ctx, {
     eventType: "session.revoked_all",
-    actorUserId: userId,
+    actorUserId,
     targetUserId: userId,
+    context,
     metadata: { reason, revoked }
   });
 
@@ -146,7 +209,8 @@ export async function revokeOtherSessions(
 
 export async function listSessions(
   ctx: AuthEngineContext,
-  userId: string
+  input: ListSessionsInput
 ): Promise<Session[]> {
-  return ctx.storage.listSessionsByUserId(userId);
+  await requireActiveUser(ctx, input.actorUserId);
+  return ctx.storage.listSessionsByUserId(input.actorUserId);
 }

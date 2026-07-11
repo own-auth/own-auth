@@ -45,6 +45,7 @@ export type AuditEventType =
   | "api_key.revoked"
   | "api_key.used"
   | "organisation.created"
+  | "organisation.deleted"
   | "organisation.updated"
   | "member.invited"
   | "invite.accepted"
@@ -142,6 +143,22 @@ export interface ApiKey {
   metadata: JsonRecord;
 }
 
+export interface ApiKeyDetails {
+  id: string;
+  keyPrefix: string;
+  name: string;
+  userId: string | null;
+  organisationId: string | null;
+  scopes: string[];
+  status: ApiKeyStatus;
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+  revokedAt: Date | null;
+  revokedBy: string | null;
+  metadata: JsonRecord;
+}
+
 export interface Organisation {
   id: string;
   name: string;
@@ -165,8 +182,14 @@ export interface OrganisationMember {
   updatedAt: Date;
 }
 
+export interface OrganisationMemberDetails extends OrganisationMember {
+  name: string | null;
+  email: string | null;
+}
+
 export interface Invitation {
   id: string;
+  tokenId: string | null;
   organisationId: string;
   email: string | null;
   phone: string | null;
@@ -198,7 +221,7 @@ export interface CurrentSession {
 }
 
 export interface VerifiedApiKey {
-  apiKey: ApiKey;
+  apiKey: ApiKeyDetails;
   user: User | null;
   organisation: Organisation | null;
 }

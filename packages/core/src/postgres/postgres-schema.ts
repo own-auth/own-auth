@@ -122,6 +122,7 @@ export const organisationMemberColumns: ColumnMap<OrganisationMember> = {
 
 export const invitationColumns: ColumnMap<Invitation> = {
   id: "id",
+  tokenId: "token_id",
   organisationId: "organisation_id",
   email: "email",
   phone: "phone",
@@ -257,6 +258,7 @@ export const organisationMemberReturning = [
 
 export const invitationReturning = [
   "id",
+  "token_id",
   "organisation_id",
   "email",
   "phone",

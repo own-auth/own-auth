@@ -43,6 +43,7 @@ export interface AuthStorage {
 
   createOrganisation(organisation: Organisation): Promise<Organisation>;
   updateOrganisation(id: string, patch: Partial<Organisation>): Promise<Organisation | null>;
+  deleteOrganisation(id: string): Promise<boolean>;
   getOrganisationById(id: string): Promise<Organisation | null>;
   getOrganisationBySlug(slug: string): Promise<Organisation | null>;
   listOrganisationsByUserId(userId: string): Promise<Organisation[]>;
@@ -62,6 +63,7 @@ export interface AuthStorage {
   createInvitation(invitation: Invitation): Promise<Invitation>;
   updateInvitation(id: string, patch: Partial<Invitation>): Promise<Invitation | null>;
   getInvitationById(id: string): Promise<Invitation | null>;
+  getInvitationByTokenId(tokenId: string): Promise<Invitation | null>;
   listInvitationsByOrganisationId(organisationId: string): Promise<Invitation[]>;
   getPendingInvitationByOrganisationAndEmail(
     organisationId: string,
@@ -74,4 +76,5 @@ export interface AuthStorage {
     organisationId?: string;
     apiKeyId?: string;
   }): Promise<AuditEvent[]>;
+  deleteAuditEventsBefore(olderThan: Date): Promise<number>;
 }

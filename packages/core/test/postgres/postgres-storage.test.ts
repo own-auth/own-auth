@@ -175,6 +175,23 @@ describe("PostgresAuthStorage", () => {
     }
   });
 
+  it("permanently deletes an organisation and its invitation tokens", async () => {
+    const db = new RecordingDb();
+    const storage = new PostgresAuthStorage(db);
+    db.queueRows([{ id: "org_1" }]);
+
+    const deleted = await storage.deleteOrganisation("org_1");
+
+    expect(deleted).toBe(true);
+    expect(db.lastCall.sql).toContain(
+      "delete from own_auth_tokens where organisation_id = $1"
+    );
+    expect(db.lastCall.sql).toContain(
+      "delete from own_auth_organisations where id = $1 returning id"
+    );
+    expect(db.lastCall.params).toEqual(["org_1"]);
+  });
+
   it("fetches pending invitations with case-insensitive email matching", async () => {
     const db = new RecordingDb();
     const storage = new PostgresAuthStorage(db);
@@ -194,6 +211,18 @@ describe("PostgresAuthStorage", () => {
     expect(db.lastCall.sql).toContain("lower(email) = lower($2)");
     expect(db.lastCall.sql).toContain("status = 'pending'");
     expect(db.lastCall.params).toEqual(["org_1", "INVITED@EXAMPLE.COM"]);
+  });
+
+  it("fetches an invitation by its token record", async () => {
+    const db = new RecordingDb();
+    const storage = new PostgresAuthStorage(db);
+    db.queueRows([invitationRow()]);
+
+    const invitation = await storage.getInvitationByTokenId("tok_1");
+
+    expect(invitation).toMatchObject({ id: "inv_1", tokenId: "tok_1" });
+    expect(db.lastCall.sql).toContain("from own_auth_invitations where token_id = $1");
+    expect(db.lastCall.params).toEqual(["tok_1"]);
   });
 
   it("creates API keys with scopes, metadata, and no raw-key interpolation", async () => {
@@ -235,6 +264,21 @@ describe("PostgresAuthStorage", () => {
     expect(db.lastCall.sql).toContain("api_key_id = $3");
     expect(db.lastCall.sql).toContain("order by created_at desc");
     expect(db.lastCall.params).toEqual(["usr_1", "org_1", "key_1"]);
+  });
+
+  it("deletes audit events before a cutoff with parameterized SQL", async () => {
+    const db = new RecordingDb();
+    const storage = new PostgresAuthStorage(db);
+    const olderThan = new Date("2026-01-01T00:00:00.000Z");
+    db.queueRows([{ id: "evt_1" }, { id: "evt_2" }]);
+
+    const deleted = await storage.deleteAuditEventsBefore(olderThan);
+
+    expect(deleted).toBe(2);
+    expect(db.lastCall.sql).toBe(
+      "delete from own_auth_audit_events where created_at < $1 returning id"
+    );
+    expect(db.lastCall.params).toEqual([olderThan]);
   });
 });
 
@@ -314,6 +358,7 @@ function sessionRow(overrides: Record<string, unknown> = {}): Record<string, unk
 function invitationRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: "inv_1",
+    token_id: "tok_1",
     organisation_id: "org_1",
     email: "invited@example.com",
     phone: null,

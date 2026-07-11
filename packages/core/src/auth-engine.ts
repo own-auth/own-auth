@@ -1,12 +1,13 @@
 import type { Permission } from "./permissions.js";
 import type { AuthStorage } from "./storage.js";
 import type {
-  ApiKey,
+  ApiKeyDetails,
   AuditEvent,
   CurrentSession,
   Invitation,
   Organisation,
   OrganisationMember,
+  OrganisationMemberDetails,
   RequestContext,
   Session,
   User,
@@ -18,6 +19,7 @@ import {
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import * as apiKeys from "./auth-engine-api-keys.js";
+import * as auditEvents from "./auth-engine-audit.js";
 import * as email from "./auth-engine-email.js";
 import * as external from "./auth-engine-external.js";
 import * as invitations from "./auth-engine-invitations.js";
@@ -26,25 +28,37 @@ import * as sessions from "./auth-engine-sessions.js";
 import * as sms from "./auth-engine-sms.js";
 import * as users from "./auth-engine-users.js";
 import type {
-  AcceptInvitationInput,
-  ApiKeyListFilter,
-  AuditEventFilter,
+  AcceptInviteInput,
+  AcceptInviteResult,
   ChangeMemberRoleInput,
   ChangePasswordInput,
+  CleanupAuditLogsInput,
   CreateApiKeyInput,
   CreatedApiKey,
   CreateOrganisationInput,
   CreateUserInput,
+  DeleteOrganisationInput,
   DeliveryResult,
+  GetOrganisationInput,
+  GetMemberInput,
   InvitationResult,
   InviteMemberInput,
+  ListApiKeysInput,
+  ListAuditEventsInput,
+  ListInvitationsInput,
+  ListMembersInput,
+  ListOrganisationsInput,
+  ListSessionsInput,
   OwnAuthOptions,
   RemoveMemberInput,
   RequestEmailVerificationInput,
   RequestSmsOtpInput,
   RequestTokenInput,
   ResetPasswordInput,
+  RevokeAllSessionsInput,
+  RevokeApiKeyInput,
   RevokeInvitationInput,
+  RevokeSessionInput,
   SessionResult,
   SignInEmailPasswordInput,
   SignInWithExternalProviderInput,
@@ -79,7 +93,10 @@ export class OwnAuth {
   getCurrentSession(sessionToken: string): Promise<CurrentSession | null> { return sessions.getCurrentSession(this.ctx, sessionToken); }
   requireCurrentSession(sessionToken: string): Promise<CurrentSession> { return sessions.requireCurrentSession(this.ctx, sessionToken); }
   signOut(sessionToken: string, context?: RequestContext): Promise<void> { return sessions.signOut(this.ctx, sessionToken, context); }
-  revokeAllSessions(userId: string, reason = "all_sessions_revoked"): Promise<number> { return sessions.revokeAllSessions(this.ctx, userId, reason); }
+  revokeSession(input: RevokeSessionInput): Promise<Session> { return sessions.revokeSession(this.ctx, input); }
+  revokeAllSessions(input: RevokeAllSessionsInput): Promise<number> {
+    return sessions.revokeAllSessions(this.ctx, input);
+  }
   requestMagicLink(input: RequestTokenInput): Promise<DeliveryResult> { return email.requestMagicLink(this.ctx, input); }
   verifyMagicLink(input: VerifyTokenInput): Promise<SessionResult> { return email.verifyMagicLink(this.ctx, input); }
   requestEmailVerification(input: RequestEmailVerificationInput): Promise<DeliveryResult> {
@@ -94,12 +111,8 @@ export class OwnAuth {
   verifySmsOtp(input: VerifySmsOtpInput): Promise<SmsOtpVerificationResult> { return sms.verifySmsOtp(this.ctx, input); }
   createApiKey(input: CreateApiKeyInput): Promise<CreatedApiKey> { return apiKeys.createApiKey(this.ctx, input); }
   verifyApiKey(rawKey: string, requiredScopes: string[] = []): Promise<VerifiedApiKey> { return apiKeys.verifyApiKey(this.ctx, rawKey, requiredScopes); }
-  revokeApiKey(
-    keyPrefixOrId: string,
-    revokedBy?: string,
-    context?: RequestContext
-  ): Promise<ApiKey> {
-    return apiKeys.revokeApiKey(this.ctx, keyPrefixOrId, revokedBy, context);
+  revokeApiKey(input: RevokeApiKeyInput): Promise<ApiKeyDetails> {
+    return apiKeys.revokeApiKey(this.ctx, input);
   }
   createOrganisation(input: CreateOrganisationInput): Promise<{
     organisation: Organisation;
@@ -107,17 +120,27 @@ export class OwnAuth {
   }> {
     return organisations.createOrganisation(this.ctx, input);
   }
+  getOrganisation(input: GetOrganisationInput): Promise<Organisation> {
+    return organisations.getOrganisation(this.ctx, input);
+  }
+  deleteOrganisation(input: DeleteOrganisationInput): Promise<Organisation> {
+    return organisations.deleteOrganisation(this.ctx, input);
+  }
   updateOrganisation(organisationId: string, input: UpdateOrganisationInput): Promise<Organisation> {
     return organisations.updateOrganisation(this.ctx, organisationId, input);
   }
   inviteMember(input: InviteMemberInput): Promise<InvitationResult> { return invitations.inviteMember(this.ctx, input); }
-  acceptInvitation(
-    input: AcceptInvitationInput
-  ): Promise<{ invitation: Invitation; user: User; member: OrganisationMember }> {
-    return invitations.acceptInvitation(this.ctx, input);
+  acceptInvite(input: AcceptInviteInput): Promise<AcceptInviteResult> {
+    return invitations.acceptInvite(this.ctx, input);
   }
   changeMemberRole(input: ChangeMemberRoleInput): Promise<OrganisationMember> { return organisations.changeMemberRole(this.ctx, input); }
   removeMember(input: RemoveMemberInput): Promise<OrganisationMember> { return organisations.removeMember(this.ctx, input); }
+  getMember(input: GetMemberInput): Promise<OrganisationMemberDetails> {
+    return organisations.getMember(this.ctx, input);
+  }
+  listMembers(input: ListMembersInput): Promise<OrganisationMemberDetails[]> {
+    return organisations.listMembers(this.ctx, input);
+  }
   checkPermission(
     organisationId: string,
     userId: string,
@@ -135,11 +158,24 @@ export class OwnAuth {
   disableUser(input: UserStatusInput): Promise<User> { return users.disableUser(this.ctx, input); }
   enableUser(input: UserStatusInput): Promise<User> { return users.enableUser(this.ctx, input); }
   revokeInvitation(input: RevokeInvitationInput): Promise<Invitation> { return invitations.revokeInvitation(this.ctx, input); }
-  listSessions(userId: string): Promise<Session[]> { return sessions.listSessions(this.ctx, userId); }
-  listApiKeys(filter: ApiKeyListFilter): Promise<ApiKey[]> { return apiKeys.listApiKeys(this.ctx, filter); }
-  listOrganisations(userId: string): Promise<Organisation[]> { return organisations.listOrganisations(this.ctx, userId); }
-  listInvitations(organisationId: string): Promise<Invitation[]> { return invitations.listInvitations(this.ctx, organisationId); }
-  listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]> { return this.storage.listAuditEvents(filter); }
+  listSessions(input: ListSessionsInput): Promise<Session[]> {
+    return sessions.listSessions(this.ctx, input);
+  }
+  listApiKeys(input: ListApiKeysInput): Promise<ApiKeyDetails[]> {
+    return apiKeys.listApiKeys(this.ctx, input);
+  }
+  listOrganisations(input: ListOrganisationsInput): Promise<Organisation[]> {
+    return organisations.listOrganisations(this.ctx, input.actorUserId);
+  }
+  listInvitations(input: ListInvitationsInput): Promise<Invitation[]> {
+    return invitations.listInvitations(this.ctx, input);
+  }
+  listAuditEvents(input: ListAuditEventsInput): Promise<AuditEvent[]> {
+    return auditEvents.listAuditEvents(this.ctx, input);
+  }
+  cleanupAuditLogs(input: CleanupAuditLogsInput): Promise<number> {
+    return auditEvents.cleanupAuditLogs(this.ctx, input);
+  }
 }
 
 export function createOwnAuth(options?: OwnAuthOptions): OwnAuth {

@@ -121,6 +121,18 @@ export function assertUserEnabled(user: User): void {
   }
 }
 
+export async function requireActiveUser(
+  ctx: AuthEngineContext,
+  userId: string
+): Promise<User> {
+  const user = await ctx.storage.getUserById(userId);
+  if (!user) {
+    throw new AuthError("user_not_found", "User not found", 404);
+  }
+  assertUserEnabled(user);
+  return user;
+}
+
 export async function uniqueOrganisationSlug(
   ctx: AuthEngineContext,
   baseSlug: string

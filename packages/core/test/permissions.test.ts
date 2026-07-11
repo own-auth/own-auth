@@ -17,12 +17,13 @@ describe("permissionsForRole", () => {
     expect(perms).toHaveLength(9);
   });
 
-  it("gives admin everything except manage_organisation", () => {
+  it("does not give admins owner-only permissions", () => {
     const perms = permissionsForRole("admin");
     expect(perms).not.toContain("manage_organisation");
+    expect(perms).not.toContain("change_member_roles");
     expect(perms).toContain("invite_members");
     expect(perms).toContain("manage_api_keys");
-    expect(perms).toHaveLength(8);
+    expect(perms).toHaveLength(7);
   });
 
   it("gives member only view_members", () => {

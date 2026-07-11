@@ -316,7 +316,7 @@ describe("OwnAuth core", () => {
       scopes: ["read users"]
     });
 
-    expect(created.apiKey.keyHash).not.toContain(created.rawKey);
+    expect(created.apiKey).not.toHaveProperty("keyHash");
 
     const verified = await auth.verifyApiKey(created.rawKey, ["read users"]);
     expect(verified.organisation?.id).toBe(organisation.id);
@@ -325,7 +325,10 @@ describe("OwnAuth core", () => {
       code: "insufficient_scope"
     });
 
-    await auth.revokeApiKey(created.apiKey.keyPrefix, owner.user.id);
+    await auth.revokeApiKey({
+      keyPrefix: created.apiKey.keyPrefix,
+      actorUserId: owner.user.id
+    });
     await expect(auth.verifyApiKey(created.rawKey)).rejects.toMatchObject({
       code: "api_key_revoked"
     });
@@ -372,6 +375,7 @@ describe("OwnAuth core", () => {
       name: "Revoke Org",
       ownerUserId: owner.user.id
     });
+    const invitedUser = await auth.createUser({ email: "revokeme@example.com" });
 
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
@@ -388,8 +392,8 @@ describe("OwnAuth core", () => {
     expect(revoked.revokedAt).toBeInstanceOf(Date);
 
     await expect(
-      auth.acceptInvitation({ token: invite.token ?? "" })
-    ).rejects.toMatchObject({ code: "invitation_not_found" });
+      auth.acceptInvite({ token: invite.token ?? "", userId: invitedUser.id })
+    ).rejects.toMatchObject({ code: "token_already_used" });
   });
 
   it("lists sessions, API keys, organisations, and invitations", async () => {
@@ -399,7 +403,7 @@ describe("OwnAuth core", () => {
       password: "correct-horse"
     });
 
-    const sessions = await auth.listSessions(owner.user.id);
+    const sessions = await auth.listSessions({ actorUserId: owner.user.id });
     expect(sessions.length).toBe(1);
     expect(sessions[0].userId).toBe(owner.user.id);
 
@@ -408,7 +412,7 @@ describe("OwnAuth core", () => {
       ownerUserId: owner.user.id
     });
 
-    const orgs = await auth.listOrganisations(owner.user.id);
+    const orgs = await auth.listOrganisations({ actorUserId: owner.user.id });
     expect(orgs.length).toBe(1);
     expect(orgs[0].id).toBe(organisation.id);
 
@@ -425,7 +429,10 @@ describe("OwnAuth core", () => {
       scopes: ["write"]
     });
 
-    const keys = await auth.listApiKeys({ organisationId: organisation.id });
+    const keys = await auth.listApiKeys({
+      organisationId: organisation.id,
+      actorUserId: owner.user.id
+    });
     expect(keys.length).toBe(2);
 
     await auth.inviteMember({
@@ -441,8 +448,32 @@ describe("OwnAuth core", () => {
       role: "admin"
     });
 
-    const invitations = await auth.listInvitations(organisation.id);
+    const invitations = await auth.listInvitations({
+      organisationId: organisation.id,
+      actorUserId: owner.user.id
+    });
     expect(invitations.length).toBe(2);
+  });
+
+  it("cleans audit logs older than a cutoff", async () => {
+    const { auth } = createTestAuth();
+    const signup = await auth.signUpEmailPassword({
+      email: "audit-cleanup@example.com",
+      password: "correct-horse"
+    });
+    const before = await auth.listAuditEvents({ actorUserId: signup.user.id });
+
+    const deleted = await auth.cleanupAuditLogs({
+      olderThan: new Date(Date.now() + 1_000)
+    });
+
+    expect(deleted).toBe(before.length);
+    await expect(
+      auth.listAuditEvents({ actorUserId: signup.user.id })
+    ).resolves.toEqual([]);
+    await expect(
+      auth.cleanupAuditLogs({ olderThan: new Date("invalid") })
+    ).rejects.toMatchObject({ code: "validation_error" });
   });
 
   it("handles organisation invites and role permissions", async () => {
@@ -455,6 +486,7 @@ describe("OwnAuth core", () => {
       name: "Example Co",
       ownerUserId: owner.user.id
     });
+    const adminUser = await auth.createUser({ email: "admin@example.com" });
 
     const invite = await auth.inviteMember({
       organisationId: organisation.id,
@@ -465,11 +497,14 @@ describe("OwnAuth core", () => {
     expect(invite.token).toBeTruthy();
     expect(emailProvider.messages.at(-1)?.type).toBe("organisation_invite");
 
-    const accepted = await auth.acceptInvitation({ token: invite.token ?? "" });
+    const accepted = await auth.acceptInvite({
+      token: invite.token ?? "",
+      userId: adminUser.id
+    });
     expect(accepted.member.role).toBe("admin");
 
     await expect(
-      auth.checkPermission(organisation.id, accepted.user.id, "manage_api_keys")
+      auth.checkPermission(organisation.id, adminUser.id, "manage_api_keys")
     ).resolves.toBe(true);
   });
 });

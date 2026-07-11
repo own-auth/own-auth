@@ -12,6 +12,7 @@ export {
   createSession,
   markUserLoggedIn,
   rateLimit,
+  requireActiveUser,
   uniqueOrganisationSlug
 } from "./auth-engine-helpers.js";
 export {
@@ -20,6 +21,7 @@ export {
   consumeToken,
   delivery,
   extractApiKeyPrefix,
+  getUsableToken,
   hash,
   hashPasswordInput,
   issueToken

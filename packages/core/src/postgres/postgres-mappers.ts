@@ -156,6 +156,7 @@ export function mapOrganisationMember(row: Row): OrganisationMember {
 export function mapInvitation(row: Row): Invitation {
   return {
     id: stringValue(row.id),
+    tokenId: nullableString(row.token_id),
     organisationId: stringValue(row.organisation_id),
     email: nullableString(row.email),
     phone: nullableString(row.phone),

@@ -26,7 +26,6 @@ const rolePermissions: Record<OrganisationRole, Permission[]> = {
   admin: [
     "invite_members",
     "remove_members",
-    "change_member_roles",
     "view_members",
     "view_audit_events",
     "manage_sessions",

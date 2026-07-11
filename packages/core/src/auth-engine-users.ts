@@ -29,7 +29,7 @@ import {
 } from "./auth-engine-internals.js";
 import {
   requireCurrentSession,
-  revokeAllSessions,
+  revokeAllSessionsForUser,
   revokeOtherSessions
 } from "./auth-engine-sessions.js";
 
@@ -181,6 +181,10 @@ export async function changePassword(
 }
 
 export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
+  if (input.actorUserId !== input.userId) {
+    throw new AuthError("permission_denied", "Users can only disable their own account", 403);
+  }
+
   const user = await ctx.storage.getUserById(input.userId);
   if (!user) {
     throw new AuthError("user_not_found", "User not found", 404);
@@ -196,7 +200,13 @@ export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput
     updatedAt: now
   });
 
-  await revokeAllSessions(ctx, input.userId, "user_disabled");
+  await revokeAllSessionsForUser(
+    ctx,
+    input.userId,
+    "user_disabled",
+    input.actorUserId,
+    input.request
+  );
 
   await audit(ctx, {
     eventType: "user.disabled",
@@ -209,6 +219,10 @@ export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput
 }
 
 export async function enableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
+  if (input.actorUserId !== input.userId) {
+    throw new AuthError("permission_denied", "Users can only enable their own account", 403);
+  }
+
   const user = await ctx.storage.getUserById(input.userId);
   if (!user) {
     throw new AuthError("user_not_found", "User not found", 404);

@@ -1,14 +1,26 @@
 import { AuthError } from "./errors.js";
 import { createId, randomBase64Url, safeEqual } from "./crypto.js";
 import { isExpired } from "./normalise.js";
-import type { ApiKey, RequestContext, VerifiedApiKey } from "./types.js";
-import { hour, type ApiKeyListFilter, type CreatedApiKey, type CreateApiKeyInput } from "./auth-engine-types.js";
+import type {
+  ApiKey,
+  ApiKeyDetails,
+  Organisation,
+  VerifiedApiKey
+} from "./types.js";
+import {
+  hour,
+  type CreatedApiKey,
+  type CreateApiKeyInput,
+  type ListApiKeysInput,
+  type RevokeApiKeyInput
+} from "./auth-engine-types.js";
 import {
   audit,
   cloneMetadata,
   extractApiKeyPrefix,
   hash,
   rateLimit,
+  requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { requirePermission } from "./auth-engine-organisations.js";
@@ -17,18 +29,20 @@ export async function createApiKey(
   ctx: AuthEngineContext,
   input: CreateApiKeyInput
 ): Promise<CreatedApiKey> {
-  if (!input.userId && !input.organisationId) {
-    throw new AuthError("permission_denied", "API keys need a user or organisation owner", 400);
+  if (!input.actorUserId) {
+    throw new AuthError("permission_denied", "An acting user is required", 403);
   }
 
-  if (input.organisationId && input.actorUserId) {
+  if (input.organisationId) {
     await requirePermission(ctx, input.organisationId, input.actorUserId, "manage_api_keys");
+  } else {
+    await requireActiveUser(ctx, input.actorUserId);
   }
 
   await rateLimit(
     ctx,
     "api-key-create",
-    input.organisationId ?? input.userId ?? input.actorUserId ?? "anonymous",
+    input.organisationId ?? input.actorUserId,
     20,
     hour
   );
@@ -41,7 +55,7 @@ export async function createApiKey(
     keyPrefix: prefix,
     keyHash: hash(ctx, rawKey),
     name: input.name,
-    userId: input.userId ?? null,
+    userId: input.organisationId ? null : input.actorUserId,
     organisationId: input.organisationId ?? null,
     scopes: input.scopes ?? [],
     status: "active",
@@ -55,15 +69,15 @@ export async function createApiKey(
 
   await audit(ctx, {
     eventType: "api_key.created",
-    actorUserId: input.actorUserId ?? input.userId ?? null,
-    targetUserId: input.userId ?? null,
+    actorUserId: input.actorUserId,
+    targetUserId: input.organisationId ? null : input.actorUserId,
     organisationId: input.organisationId ?? null,
     apiKeyId: apiKey.id,
     context: input.request,
     metadata: { name: input.name, scopes: apiKey.scopes }
   });
 
-  return { apiKey, rawKey };
+  return { apiKey: apiKeyDetails(apiKey), rawKey };
 }
 
 export async function verifyApiKey(
@@ -89,6 +103,14 @@ export async function verifyApiKey(
     throw new AuthError("api_key_expired", "API key has expired", 401);
   }
 
+  let organisation: Organisation | null = null;
+  if (apiKey.organisationId) {
+    organisation = await ctx.storage.getOrganisationById(apiKey.organisationId);
+    if (!organisation || organisation.disabledAt) {
+      throw new AuthError("api_key_revoked", "API key has been revoked", 401);
+    }
+  }
+
   const hasAllScopes = requiredScopes.every(
     (scope) => apiKey.scopes.includes("*") || apiKey.scopes.includes(scope)
   );
@@ -112,12 +134,8 @@ export async function verifyApiKey(
   });
 
   const user = activeApiKey.userId ? await ctx.storage.getUserById(activeApiKey.userId) : null;
-  const organisation = activeApiKey.organisationId
-    ? await ctx.storage.getOrganisationById(activeApiKey.organisationId)
-    : null;
-
   return {
-    apiKey: activeApiKey,
+    apiKey: apiKeyDetails(activeApiKey),
     user,
     organisation
   };
@@ -125,46 +143,80 @@ export async function verifyApiKey(
 
 export async function revokeApiKey(
   ctx: AuthEngineContext,
-  keyPrefixOrId: string,
-  revokedBy?: string,
-  context?: RequestContext
-): Promise<ApiKey> {
-  let apiKey = await ctx.storage.getApiKeyByPrefix(keyPrefixOrId);
+  input: RevokeApiKeyInput
+): Promise<ApiKeyDetails> {
+  let apiKey = await ctx.storage.getApiKeyByPrefix(input.keyPrefix);
 
   if (!apiKey) {
     throw new AuthError("api_key_invalid", "Invalid API key", 404);
   }
 
+  if (apiKey.organisationId) {
+    await requirePermission(
+      ctx,
+      apiKey.organisationId,
+      input.actorUserId,
+      "manage_api_keys"
+    );
+  } else if (apiKey.userId !== input.actorUserId) {
+    throw new AuthError("permission_denied", "API key does not belong to this user", 403);
+  } else {
+    await requireActiveUser(ctx, input.actorUserId);
+  }
+
   const updatedApiKey = await ctx.storage.updateApiKey(apiKey.id, {
     status: "revoked",
     revokedAt: new Date(),
-    revokedBy: revokedBy ?? null
+    revokedBy: input.actorUserId
   });
   apiKey = updatedApiKey ?? apiKey;
 
   await audit(ctx, {
     eventType: "api_key.revoked",
-    actorUserId: revokedBy ?? apiKey.userId,
+    actorUserId: input.actorUserId,
     targetUserId: apiKey.userId,
     organisationId: apiKey.organisationId,
     apiKeyId: apiKey.id,
-    context
+    context: input.request
   });
 
-  return apiKey;
+  return apiKeyDetails(apiKey);
 }
 
 export async function listApiKeys(
   ctx: AuthEngineContext,
-  filter: ApiKeyListFilter
-): Promise<ApiKey[]> {
-  if (filter.organisationId) {
-    return ctx.storage.listApiKeysByOrganisationId(filter.organisationId);
+  input: ListApiKeysInput
+): Promise<ApiKeyDetails[]> {
+  if (input.organisationId) {
+    await requirePermission(
+      ctx,
+      input.organisationId,
+      input.actorUserId,
+      "manage_api_keys"
+    );
+    const apiKeys = await ctx.storage.listApiKeysByOrganisationId(input.organisationId);
+    return apiKeys.map(apiKeyDetails);
   }
 
-  if (filter.userId) {
-    return ctx.storage.listApiKeysByUserId(filter.userId);
-  }
+  await requireActiveUser(ctx, input.actorUserId);
+  const apiKeys = await ctx.storage.listApiKeysByUserId(input.actorUserId);
+  return apiKeys.map(apiKeyDetails);
+}
 
-  return [];
+function apiKeyDetails(apiKey: ApiKey): ApiKeyDetails {
+  return {
+    id: apiKey.id,
+    keyPrefix: apiKey.keyPrefix,
+    name: apiKey.name,
+    userId: apiKey.userId,
+    organisationId: apiKey.organisationId,
+    scopes: [...apiKey.scopes],
+    status: apiKey.status,
+    expiresAt: apiKey.expiresAt,
+    lastUsedAt: apiKey.lastUsedAt,
+    createdAt: apiKey.createdAt,
+    revokedAt: apiKey.revokedAt,
+    revokedBy: apiKey.revokedBy,
+    metadata: { ...apiKey.metadata }
+  };
 }

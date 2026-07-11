@@ -131,6 +131,89 @@ describeWithDatabase("PostgresAuthStorage integration", () => {
     );
     expect(externalAccountRows.rows).toEqual([{ provider: "google" }]);
     expect(rateLimitRows.rows[0]?.count).toBeGreaterThan(0);
+
+    await auth.inviteMember({
+      organisationId: organisation.id,
+      email: "pending-postgres@example.com",
+      invitedByUserId: signup.user.id
+    });
+    const deletedOrganisation = await auth.deleteOrganisation({
+      organisationId: organisation.id,
+      actorUserId: signup.user.id
+    });
+
+    const [
+      organisationCount,
+      memberCount,
+      invitationCount,
+      organisationKeyCount,
+      organisationTokenCount,
+      ownerCount,
+      deletionAudit
+    ] = await Promise.all([
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_organisations where id = $1",
+        [organisation.id]
+      ),
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_organisation_members where organisation_id = $1",
+        [organisation.id]
+      ),
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_invitations where organisation_id = $1",
+        [organisation.id]
+      ),
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_api_keys where organisation_id = $1",
+        [organisation.id]
+      ),
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_tokens where organisation_id = $1",
+        [organisation.id]
+      ),
+      client.query<{ count: number }>(
+        "select count(*)::int as count from own_auth_users where id = $1",
+        [signup.user.id]
+      ),
+      client.query<{
+        organisation_id: string | null;
+        metadata: Record<string, unknown>;
+      }>(
+        "select organisation_id, metadata from own_auth_audit_events where event_type = 'organisation.deleted' order by created_at desc limit 1"
+      )
+    ]);
+
+    expect(deletedOrganisation.id).toBe(organisation.id);
+    expect(organisationCount.rows[0]?.count).toBe(0);
+    expect(memberCount.rows[0]?.count).toBe(0);
+    expect(invitationCount.rows[0]?.count).toBe(0);
+    expect(organisationKeyCount.rows[0]?.count).toBe(0);
+    expect(organisationTokenCount.rows[0]?.count).toBe(0);
+    expect(ownerCount.rows[0]?.count).toBe(1);
+    expect(deletionAudit.rows[0]).toMatchObject({
+      organisation_id: null,
+      metadata: {
+        organisationId: organisation.id,
+        name: organisation.name,
+        slug: organisation.slug,
+        membersRemoved: 1,
+        apiKeysRemoved: 1,
+        invitationsRemoved: 1
+      }
+    });
+    await expect(auth.requireCurrentSession(signup.sessionToken)).resolves.toMatchObject({
+      user: { id: signup.user.id }
+    });
+
+    const deletedAuditEvents = await auth.cleanupAuditLogs({
+      olderThan: new Date(Date.now() + 1_000)
+    });
+    const remainingAuditEvents = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_audit_events"
+    );
+
+    expect(deletedAuditEvents).toBeGreaterThan(0);
+    expect(remainingAuditEvents.rows[0]?.count).toBe(0);
   });
 });
 

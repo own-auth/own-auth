@@ -19,7 +19,7 @@ import {
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { requestEmailToken } from "./auth-engine-email-token.js";
-import { revokeAllSessions } from "./auth-engine-sessions.js";
+import { revokeAllSessionsForUser } from "./auth-engine-sessions.js";
 import { createUser } from "./auth-engine-users.js";
 
 export async function requestMagicLink(
@@ -166,7 +166,7 @@ export async function resetPassword(
     passwordHash,
     updatedAt: new Date()
   });
-  await revokeAllSessions(ctx, user.id, "password_reset");
+  await revokeAllSessionsForUser(ctx, user.id, "password_reset");
 
   await audit(ctx, {
     eventType: "password.changed",

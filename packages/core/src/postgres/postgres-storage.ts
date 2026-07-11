@@ -219,6 +219,17 @@ export class PostgresAuthStorage implements AuthStorage {
     return row ? mapOrganisation(row) : null;
   }
 
+  async deleteOrganisation(id: string): Promise<boolean> {
+    const result = await this.db.query<{ id: string }>(
+      `with deleted_tokens as (
+        delete from own_auth_tokens where organisation_id = $1
+      )
+      delete from own_auth_organisations where id = $1 returning id`,
+      [id]
+    );
+    return Boolean(result.rows[0]);
+  }
+
   async getOrganisationById(id: string): Promise<Organisation | null> {
     const row = await this.selectOne(`${organisationReturning} from own_auth_organisations where id = $1`, [id]);
     return row ? mapOrganisation(row) : null;
@@ -305,6 +316,14 @@ export class PostgresAuthStorage implements AuthStorage {
     return row ? mapInvitation(row) : null;
   }
 
+  async getInvitationByTokenId(tokenId: string): Promise<Invitation | null> {
+    const row = await this.selectOne(
+      `${invitationReturning} from own_auth_invitations where token_id = $1`,
+      [tokenId]
+    );
+    return row ? mapInvitation(row) : null;
+  }
+
   async listInvitationsByOrganisationId(organisationId: string): Promise<Invitation[]> {
     const rows = await this.selectMany(
       `${invitationReturning} from own_auth_invitations where organisation_id = $1 order by created_at desc`,
@@ -358,6 +377,14 @@ export class PostgresAuthStorage implements AuthStorage {
       params
     );
     return rows.map(mapAuditEvent);
+  }
+
+  async deleteAuditEventsBefore(olderThan: Date): Promise<number> {
+    const result = await this.db.query<{ id: string }>(
+      "delete from own_auth_audit_events where created_at < $1 returning id",
+      [olderThan]
+    );
+    return result.rows.length;
   }
 
   private async insertOne<Entity extends { id: string }>(
