@@ -24,7 +24,7 @@ import {
 import {
   requireActiveOrganisation,
   requirePermission
-} from "./auth-engine-organisations.js";
+} from "./auth-engine-organisation-access.js";
 
 export async function inviteMember(
   ctx: AuthEngineContext,

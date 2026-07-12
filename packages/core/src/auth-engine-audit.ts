@@ -8,7 +8,7 @@ import {
   requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
-import { requirePermission } from "./auth-engine-organisations.js";
+import { requirePermission } from "./auth-engine-organisation-access.js";
 
 export async function listAuditEvents(
   ctx: AuthEngineContext,

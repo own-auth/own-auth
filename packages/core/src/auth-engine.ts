@@ -23,6 +23,8 @@ import * as auditEvents from "./auth-engine-audit.js";
 import * as email from "./auth-engine-email.js";
 import * as external from "./auth-engine-external.js";
 import * as invitations from "./auth-engine-invitations.js";
+import * as members from "./auth-engine-members.js";
+import * as organisationAccess from "./auth-engine-organisation-access.js";
 import * as organisations from "./auth-engine-organisations.js";
 import * as sessions from "./auth-engine-sessions.js";
 import * as sms from "./auth-engine-sms.js";
@@ -133,27 +135,27 @@ export class OwnAuth {
   acceptInvite(input: AcceptInviteInput): Promise<AcceptInviteResult> {
     return invitations.acceptInvite(this.ctx, input);
   }
-  changeMemberRole(input: ChangeMemberRoleInput): Promise<OrganisationMember> { return organisations.changeMemberRole(this.ctx, input); }
-  removeMember(input: RemoveMemberInput): Promise<OrganisationMember> { return organisations.removeMember(this.ctx, input); }
+  changeMemberRole(input: ChangeMemberRoleInput): Promise<OrganisationMember> { return members.changeMemberRole(this.ctx, input); }
+  removeMember(input: RemoveMemberInput): Promise<OrganisationMember> { return members.removeMember(this.ctx, input); }
   getMember(input: GetMemberInput): Promise<OrganisationMemberDetails> {
-    return organisations.getMember(this.ctx, input);
+    return members.getMember(this.ctx, input);
   }
   listMembers(input: ListMembersInput): Promise<OrganisationMemberDetails[]> {
-    return organisations.listMembers(this.ctx, input);
+    return members.listMembers(this.ctx, input);
   }
   checkPermission(
     organisationId: string,
     userId: string,
     permission: Permission
   ): Promise<boolean> {
-    return organisations.checkPermission(this.ctx, organisationId, userId, permission);
+    return organisationAccess.checkPermission(this.ctx, organisationId, userId, permission);
   }
   requirePermission(
     organisationId: string,
     userId: string,
     permission: Permission
   ): Promise<OrganisationMember> {
-    return organisations.requirePermission(this.ctx, organisationId, userId, permission);
+    return organisationAccess.requirePermission(this.ctx, organisationId, userId, permission);
   }
   disableUser(input: UserStatusInput): Promise<User> { return users.disableUser(this.ctx, input); }
   enableUser(input: UserStatusInput): Promise<User> { return users.enableUser(this.ctx, input); }

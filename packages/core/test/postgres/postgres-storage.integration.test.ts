@@ -142,46 +142,36 @@ describeWithDatabase("PostgresAuthStorage integration", () => {
       actorUserId: signup.user.id
     });
 
-    const [
-      organisationCount,
-      memberCount,
-      invitationCount,
-      organisationKeyCount,
-      organisationTokenCount,
-      ownerCount,
-      deletionAudit
-    ] = await Promise.all([
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_organisations where id = $1",
-        [organisation.id]
-      ),
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_organisation_members where organisation_id = $1",
-        [organisation.id]
-      ),
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_invitations where organisation_id = $1",
-        [organisation.id]
-      ),
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_api_keys where organisation_id = $1",
-        [organisation.id]
-      ),
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_tokens where organisation_id = $1",
-        [organisation.id]
-      ),
-      client.query<{ count: number }>(
-        "select count(*)::int as count from own_auth_users where id = $1",
-        [signup.user.id]
-      ),
-      client.query<{
-        organisation_id: string | null;
-        metadata: Record<string, unknown>;
-      }>(
-        "select organisation_id, metadata from own_auth_audit_events where event_type = 'organisation.deleted' order by created_at desc limit 1"
-      )
-    ]);
+    const organisationCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_organisations where id = $1",
+      [organisation.id]
+    );
+    const memberCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_organisation_members where organisation_id = $1",
+      [organisation.id]
+    );
+    const invitationCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_invitations where organisation_id = $1",
+      [organisation.id]
+    );
+    const organisationKeyCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_api_keys where organisation_id = $1",
+      [organisation.id]
+    );
+    const organisationTokenCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_tokens where organisation_id = $1",
+      [organisation.id]
+    );
+    const ownerCount = await client.query<{ count: number }>(
+      "select count(*)::int as count from own_auth_users where id = $1",
+      [signup.user.id]
+    );
+    const deletionAudit = await client.query<{
+      organisation_id: string | null;
+      metadata: Record<string, unknown>;
+    }>(
+      "select organisation_id, metadata from own_auth_audit_events where event_type = 'organisation.deleted' order by created_at desc limit 1"
+    );
 
     expect(deletedOrganisation.id).toBe(organisation.id);
     expect(organisationCount.rows[0]?.count).toBe(0);
