@@ -1,4 +1,3 @@
-import { createId } from "./crypto.js";
 import { AuthError } from "./errors.js";
 import { normalizeEmail } from "./normalise.js";
 import type { ExternalAccountProvider, User } from "./types.js";
@@ -11,10 +10,10 @@ import {
   accountFor,
   assertUserEnabled,
   audit,
-  cloneMetadata,
   createSession,
   markUserLoggedIn,
   rateLimit,
+  userFor,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 
@@ -101,21 +100,20 @@ async function createExternalUser(
   email: string | null
 ): Promise<User> {
   const now = new Date();
-  const user = await ctx.storage.createUser({
-    id: createId("usr"),
-    email,
-    emailVerifiedAt: email ? now : null,
-    phone: null,
-    phoneVerifiedAt: null,
-    passwordHash: null,
-    name: input.name ?? null,
-    imageUrl: input.imageUrl ?? null,
-    disabledAt: null,
-    metadata: cloneMetadata(input.metadata),
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: null
-  });
+  const user = await ctx.storage.createUser(
+    userFor({
+      email,
+      emailVerifiedAt: email ? now : null,
+      phone: null,
+      phoneVerifiedAt: null,
+      passwordHash: null,
+      name: input.name,
+      imageUrl: input.imageUrl,
+      metadata: input.metadata
+    },
+    now
+    )
+  );
 
   await audit(ctx, {
     eventType: "user.signed_up",

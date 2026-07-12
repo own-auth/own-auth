@@ -152,19 +152,7 @@ export async function revokeAllSessionsForUser(
   actorUserId = userId,
   context?: RequestContext
 ): Promise<number> {
-  const sessions = await ctx.storage.listSessionsByUserId(userId);
-  const now = new Date();
-  let revoked = 0;
-
-  for (const session of sessions) {
-    if (!session.revokedAt) {
-      await ctx.storage.updateSession(session.id, {
-        revokedAt: now,
-        revokeReason: reason
-      });
-      revoked += 1;
-    }
-  }
+  const revoked = await revokeSessions(ctx, userId, reason);
 
   await audit(ctx, {
     eventType: "session.revoked_all",
@@ -183,19 +171,12 @@ export async function revokeOtherSessions(
   currentSessionId: string,
   reason = "other_sessions_revoked"
 ): Promise<number> {
-  const sessions = await ctx.storage.listSessionsByUserId(userId);
-  const now = new Date();
-  let revoked = 0;
-
-  for (const session of sessions) {
-    if (!session.revokedAt && session.id !== currentSessionId) {
-      await ctx.storage.updateSession(session.id, {
-        revokedAt: now,
-        revokeReason: reason
-      });
-      revoked += 1;
-    }
-  }
+  const revoked = await revokeSessions(
+    ctx,
+    userId,
+    reason,
+    (session) => session.id !== currentSessionId
+  );
 
   await audit(ctx, {
     eventType: "session.revoked_other",
@@ -203,6 +184,26 @@ export async function revokeOtherSessions(
     targetUserId: userId,
     metadata: { reason, revoked }
   });
+
+  return revoked;
+}
+
+async function revokeSessions(
+  ctx: AuthEngineContext,
+  userId: string,
+  reason: string,
+  include: (session: Session) => boolean = () => true
+): Promise<number> {
+  const sessions = await ctx.storage.listSessionsByUserId(userId);
+  const revokedAt = new Date();
+  let revoked = 0;
+
+  for (const session of sessions) {
+    if (!session.revokedAt && include(session)) {
+      await ctx.storage.updateSession(session.id, { revokedAt, revokeReason: reason });
+      revoked += 1;
+    }
+  }
 
   return revoked;
 }

@@ -142,9 +142,5 @@ export async function verifySmsOtp(
     metadata: { method: "phone_otp" }
   });
 
-  return {
-    user: sessionResult.user,
-    session: sessionResult.session,
-    sessionToken: sessionResult.sessionToken
-  };
+  return sessionResult;
 }

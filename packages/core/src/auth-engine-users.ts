@@ -1,6 +1,5 @@
 import { AuthError } from "./errors.js";
 import {
-  createId,
   hashPassword,
   passwordNeedsRehash,
   verifyPassword
@@ -20,11 +19,11 @@ import {
   accountFor,
   assertUserEnabled,
   audit,
-  cloneMetadata,
   createSession,
   hashPasswordInput,
   markUserLoggedIn,
   rateLimit,
+  userFor,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import {
@@ -47,21 +46,20 @@ export async function createUser(ctx: AuthEngineContext, input: CreateUserInput)
 
   const now = new Date();
   const passwordHash = input.password ? await hashPasswordInput(ctx, input.password) : null;
-  const user = await ctx.storage.createUser({
-    id: createId("usr"),
-    email,
-    emailVerifiedAt: null,
-    phone,
-    phoneVerifiedAt: null,
-    passwordHash,
-    name: input.name ?? null,
-    imageUrl: input.imageUrl ?? null,
-    disabledAt: null,
-    metadata: cloneMetadata(input.metadata),
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: null
-  });
+  const user = await ctx.storage.createUser(
+    userFor({
+      email,
+      emailVerifiedAt: null,
+      phone,
+      phoneVerifiedAt: null,
+      passwordHash,
+      name: input.name,
+      imageUrl: input.imageUrl,
+      metadata: input.metadata
+    },
+    now
+    )
+  );
 
   if (email && passwordHash) {
     await ctx.storage.createAccount(accountFor(user.id, "password", email, email, null, now));
@@ -181,8 +179,25 @@ export async function changePassword(
 }
 
 export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
+  return setUserDisabled(ctx, input, true);
+}
+
+export async function enableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
+  return setUserDisabled(ctx, input, false);
+}
+
+async function setUserDisabled(
+  ctx: AuthEngineContext,
+  input: UserStatusInput,
+  disabled: boolean
+): Promise<User> {
+  const action = disabled ? "disable" : "enable";
   if (input.actorUserId !== input.userId) {
-    throw new AuthError("permission_denied", "Users can only disable their own account", 403);
+    throw new AuthError(
+      "permission_denied",
+      `Users can only ${action} their own account`,
+      403
+    );
   }
 
   const user = await ctx.storage.getUserById(input.userId);
@@ -190,55 +205,28 @@ export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput
     throw new AuthError("user_not_found", "User not found", 404);
   }
 
-  if (user.disabledAt) {
+  if (Boolean(user.disabledAt) === disabled) {
     return user;
   }
 
   const now = new Date();
   const updatedUser = await ctx.storage.updateUser(input.userId, {
-    disabledAt: now,
+    disabledAt: disabled ? now : null,
     updatedAt: now
   });
 
-  await revokeAllSessionsForUser(
-    ctx,
-    input.userId,
-    "user_disabled",
-    input.actorUserId,
-    input.request
-  );
+  if (disabled) {
+    await revokeAllSessionsForUser(
+      ctx,
+      input.userId,
+      "user_disabled",
+      input.actorUserId,
+      input.request
+    );
+  }
 
   await audit(ctx, {
-    eventType: "user.disabled",
-    actorUserId: input.actorUserId,
-    targetUserId: input.userId,
-    context: input.request
-  });
-
-  return updatedUser ?? user;
-}
-
-export async function enableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
-  if (input.actorUserId !== input.userId) {
-    throw new AuthError("permission_denied", "Users can only enable their own account", 403);
-  }
-
-  const user = await ctx.storage.getUserById(input.userId);
-  if (!user) {
-    throw new AuthError("user_not_found", "User not found", 404);
-  }
-
-  if (!user.disabledAt) {
-    return user;
-  }
-
-  const updatedUser = await ctx.storage.updateUser(input.userId, {
-    disabledAt: null,
-    updatedAt: new Date()
-  });
-
-  await audit(ctx, {
-    eventType: "user.re_enabled",
+    eventType: disabled ? "user.disabled" : "user.re_enabled",
     actorUserId: input.actorUserId,
     targetUserId: input.userId,
     context: input.request

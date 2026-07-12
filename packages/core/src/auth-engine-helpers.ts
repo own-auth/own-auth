@@ -101,6 +101,36 @@ export function accountFor(
   };
 }
 
+export function userFor(
+  input: {
+    email: string | null;
+    emailVerifiedAt: Date | null;
+    phone: string | null;
+    phoneVerifiedAt: Date | null;
+    passwordHash: string | null;
+    name?: string;
+    imageUrl?: string;
+    metadata?: JsonRecord;
+  },
+  now: Date
+): User {
+  return {
+    id: createId("usr"),
+    email: input.email,
+    emailVerifiedAt: input.emailVerifiedAt,
+    phone: input.phone,
+    phoneVerifiedAt: input.phoneVerifiedAt,
+    passwordHash: input.passwordHash,
+    name: input.name ?? null,
+    imageUrl: input.imageUrl ?? null,
+    disabledAt: null,
+    metadata: cloneMetadata(input.metadata),
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: null
+  };
+}
+
 export async function rateLimit(
   ctx: AuthEngineContext,
   action: string,

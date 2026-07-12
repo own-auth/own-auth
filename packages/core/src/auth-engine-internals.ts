@@ -13,6 +13,7 @@ export {
   markUserLoggedIn,
   rateLimit,
   requireActiveUser,
+  userFor,
   uniqueOrganisationSlug
 } from "./auth-engine-helpers.js";
 export {
