@@ -96,7 +96,7 @@ export async function verifyApiKey(
   }
 
   if (apiKey.status === "revoked" || apiKey.revokedAt) {
-    throw new AuthError("api_key_revoked", "API key has been revoked", 401);
+    throw revokedApiKeyError();
   }
 
   if (apiKey.expiresAt && isExpired(apiKey.expiresAt)) {
@@ -107,8 +107,15 @@ export async function verifyApiKey(
   if (apiKey.organisationId) {
     organisation = await ctx.storage.getOrganisationById(apiKey.organisationId);
     if (!organisation || organisation.disabledAt) {
-      throw new AuthError("api_key_revoked", "API key has been revoked", 401);
+      throw revokedApiKeyError();
     }
+  }
+
+  const user = apiKey.userId === null
+    ? null
+    : await ctx.storage.getUserById(apiKey.userId);
+  if (apiKey.userId !== null && (!user || user.disabledAt)) {
+    throw revokedApiKeyError();
   }
 
   const hasAllScopes = requiredScopes.every(
@@ -133,7 +140,6 @@ export async function verifyApiKey(
     metadata: { requiredScopes }
   });
 
-  const user = activeApiKey.userId ? await ctx.storage.getUserById(activeApiKey.userId) : null;
   return {
     apiKey: apiKeyDetails(activeApiKey),
     user,
@@ -201,6 +207,10 @@ export async function listApiKeys(
   await requireActiveUser(ctx, input.actorUserId);
   const apiKeys = await ctx.storage.listApiKeysByUserId(input.actorUserId);
   return apiKeys.map(apiKeyDetails);
+}
+
+function revokedApiKeyError(): AuthError {
+  return new AuthError("api_key_revoked", "API key has been revoked", 401);
 }
 
 function apiKeyDetails(apiKey: ApiKey): ApiKeyDetails {

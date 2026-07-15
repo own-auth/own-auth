@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ConsoleEmailProvider,
   ConsoleSmsProvider,
@@ -632,6 +632,41 @@ describe("OwnAuth security regressions", () => {
     expect(verified.apiKey.lastUsedAt).toBeInstanceOf(Date);
     expect(verified.organisation?.id).toBe(organisation.id);
   });
+
+  it.each(["missing", "disabled"] as const)(
+    "rejects personal API keys when their user is %s without recording use",
+    async (userState) => {
+      const { auth, storage } = createHarness();
+      const signup = await auth.signUpEmailPassword({
+        email: `${userState}-api-key-user@example.com`,
+        password: "correct-horse"
+      });
+      const created = await auth.createApiKey({
+        name: "Personal key",
+        actorUserId: signup.user.id
+      });
+
+      if (userState === "disabled") {
+        await auth.disableUser({
+          userId: signup.user.id,
+          actorUserId: signup.user.id
+        });
+      } else {
+        const getUserById = storage.getUserById.bind(storage);
+        vi.spyOn(storage, "getUserById").mockImplementation(async (userId) =>
+          userId === signup.user.id ? null : getUserById(userId));
+      }
+      const updateApiKey = vi.spyOn(storage, "updateApiKey");
+
+      await expect(auth.verifyApiKey(created.rawKey)).rejects.toMatchObject({
+        code: "api_key_revoked"
+      });
+      expect(updateApiKey).not.toHaveBeenCalled();
+      await expect(storage.listAuditEvents({ apiKeyId: created.apiKey.id })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ eventType: "api_key.used" })])
+      );
+    }
+  );
 
   it("keeps user-scoped resources bound to the acting user", async () => {
     const { auth } = createHarness();

@@ -94,7 +94,7 @@ const rawKey = authorization.replace(/^Bearer\s+/i, "");
 const { apiKey, user, organisation } = await auth.verifyApiKey(rawKey);
 ```
 
-Own Auth checks the key format, hashes the incoming value, compares the hash, rejects revoked or expired keys, updates `lastUsedAt`, and writes an audit event. The result contains the key metadata and its associated user or organisation.
+Own Auth checks the key format, hashes the incoming value, compares the hash, rejects revoked or expired keys, updates `lastUsedAt`, and writes an audit event. Personal keys also stop authenticating when their owning user is missing or disabled; organisation keys stop authenticating when their organisation is missing or disabled. The result contains the key metadata and its associated user or organisation.
 
 Invalid keys throw `AuthError` rather than returning `null`:
 
@@ -117,7 +117,7 @@ try {
 | Code | When |
 |---|---|
 | `api_key_invalid` | The key is missing, malformed, unknown, or does not match the stored hash. |
-| `api_key_revoked` | The key has been revoked. |
+| `api_key_revoked` | The key is revoked, or its owning user or organisation is no longer active. |
 | `api_key_expired` | The key has passed its expiry time. |
 | `insufficient_scope` | The key does not include every required scope. |
 
