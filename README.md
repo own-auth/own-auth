@@ -770,11 +770,16 @@ pnpm build
 
 ## Release
 
+Maintainers publish through an explicit npm channel:
+
 ```bash
-pnpm run release:publish
+pnpm release:stable
+pnpm release:next
 ```
 
-This runs the release checks, publishes `own-auth`, then creates and pushes the matching Git tag.
+Stable versions use npm's `latest` tag. Versions such as `0.4.0-next.0` use the
+`next` tag without changing `latest`. See [Contributing](./CONTRIBUTING.md#release)
+for the release checks and recovery commands.
 
 ## License
 

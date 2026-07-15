@@ -45,16 +45,51 @@ The integration test uses `OWN_AUTH_TEST_DATABASE_URL` first, then `DATABASE_URL
 
 ## Release
 
-Check the package before publishing:
+Releases are maintainer operations. Prepare the release before publishing:
+
+1. Set the same version in `package.json` and `packages/core/package.json`.
+2. Add the matching base-version section to `CHANGELOG.md`.
+3. Commit and push the release commit to `main`.
+4. Make sure the working tree is clean and local `main` matches `origin/main`.
+
+Stable versions use the `x.y.z` format and npm's `latest` tag:
 
 ```bash
-pnpm run release:check
+pnpm release:stable
 ```
 
-Publish the `own-auth` package:
+Prereleases use the `x.y.z-next.n` format and npm's `next` tag:
 
 ```bash
-pnpm run release:publish
+pnpm release:next
 ```
 
-Update `packages/core/package.json` before publishing a new version. npm package versions cannot be overwritten.
+Both commands:
+
+1. validate the channel, versions, changelog, branch, npm version, and Git tags
+2. run the complete `release:check` suite
+3. publish from `packages/core` with npm browser authentication
+4. verify the exact npm version and dist-tag
+5. create and push the matching annotated Git tag
+
+A prerelease fails if publishing it changes npm's `latest` tag. npm package
+versions cannot be overwritten.
+
+### Release Recovery
+
+If npm publishing succeeds but registry verification or Git tagging is interrupted,
+do not publish the version again. Verify the published package:
+
+```bash
+pnpm release:verify
+```
+
+Then create or push the matching Git tag:
+
+```bash
+pnpm release:tag
+```
+
+The tag command is idempotent when the local and remote tags point to the release
+commit. It fails instead of replacing a conflicting tag. Run recovery before moving
+local `main` away from the published release commit.

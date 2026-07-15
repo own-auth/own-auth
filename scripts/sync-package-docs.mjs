@@ -177,8 +177,8 @@ if (staleFiles.length) {
 
 function packageReadme(source) {
   return source.replace(
-    /\]\(\.\/(docs\/[^)]+|SECURITY\.md|CONTRIBUTING\.md)\)/g,
-    (_match, path) => `](${repositoryFileUrl}/${path})`
+    /\]\(\.\/(docs\/[^)#]+|SECURITY\.md|CONTRIBUTING\.md)(#[^)]+)?\)/g,
+    (_match, path, hash = "") => `](${repositoryFileUrl}/${path}${hash})`
   );
 }
 

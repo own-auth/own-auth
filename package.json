@@ -37,11 +37,13 @@
     "postgres-loading:check": "node ./scripts/check-lazy-postgres.mjs",
     "docs:check": "node scripts/sync-package-docs.mjs --check",
     "docs:sync": "node scripts/sync-package-docs.mjs",
-    "release:check-clean": "node scripts/release.mjs check-clean",
     "release:check": "pnpm docs:check && pnpm build && pnpm postgres-loading:check && pnpm d1-resolution:check && pnpm cloudflare:check && pnpm test && pnpm --filter own-auth test:integration:required && pnpm --filter own-auth pack:check",
-    "release:publish": "pnpm run release:check-clean && pnpm run release:check && pnpm --filter own-auth publish:npm && pnpm run release:tag",
+    "release:next": "node scripts/release.mjs publish next",
+    "release:stable": "node scripts/release.mjs publish stable",
     "release:tag": "node scripts/release.mjs tag",
-    "test": "pnpm -r test",
+    "release:verify": "node scripts/release.mjs verify",
+    "test": "pnpm -r test && pnpm run test:release",
+    "test:release": "vitest run scripts/release.test.ts",
     "typecheck": "pnpm --filter own-auth typecheck && pnpm --filter own-auth-basic-node-example build"
   },
   "devDependencies": {
