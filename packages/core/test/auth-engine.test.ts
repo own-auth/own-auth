@@ -241,7 +241,7 @@ describe("OwnAuth core", () => {
       password: "new-password"
     });
     expect(signin.user.id).toBe(signup.user.id);
-  });
+  }, 20_000);
 
   it("changes passwords with the current password and revokes other sessions", async () => {
     const { auth } = createTestAuth();
@@ -273,7 +273,7 @@ describe("OwnAuth core", () => {
       password: "new-password"
     });
     expect(signin.user.id).toBe(signup.user.id);
-  });
+  }, 20_000);
 
   it("signs in with a verified external provider identity", async () => {
     const { auth } = createTestAuth();

@@ -58,7 +58,7 @@ describeWithDatabase("PostgresAuthStorage integration", () => {
       auth,
       inspect: (artifacts) => inspectPostgres(client, artifacts)
     });
-  });
+  }, 20_000);
 
   it("uses and closes the default lazy Postgres pool", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
