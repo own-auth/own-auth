@@ -1,6 +1,6 @@
 {
   "name": "own-auth-workspace",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Vendor-neutral authentication platform for framework-independent auth, sessions, API keys, and organisations.",
   "type": "module",

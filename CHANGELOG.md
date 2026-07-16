@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.1
+
 ### Added
 
 - Optional application-authorized administration methods under `auth.admin` for user lookup, session and audit review, account disabling and enabling, and full user-session revocation.
