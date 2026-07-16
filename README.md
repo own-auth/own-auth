@@ -2,7 +2,7 @@
 
 Own your auth. Own your users.
 
-Framework-independent authentication for TypeScript. Backed by Postgres or Cloudflare D1, controlled by you.
+Framework-independent authentication for TypeScript, with auth data that stays under your control.
 
 ## Quickstart
 
