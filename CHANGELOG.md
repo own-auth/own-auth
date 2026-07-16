@@ -24,6 +24,7 @@
 - Lazy Postgres initialization so importing `own-auth` with custom storage does not load `pg`.
 - `auth.close()` for idempotent shutdown of the Postgres pool owned by Own Auth.
 - Cloudflare D1 storage and rate-limit adapters through the explicit `own-auth/d1` package export.
+- Named `AuditEventFilter` and `ClaimWebhookDeliveriesInput` types for custom storage adapters.
 - Plugin `GET` endpoints can accept string-array query inputs through repeated query parameters; duplicate scalar parameters fail validation.
 - Versioned D1 migration generation through `npx own-auth generate --dialect d1` for Wrangler-managed deployment.
 - OpenTelemetry API instrumentation for core operations, HTTP handlers, provider calls, email and SMS delivery, plugins, and rate-limit denials. Applications configure their own SDK and exporters; without an SDK, telemetry is a no-op.

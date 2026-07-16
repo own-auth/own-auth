@@ -1,6 +1,7 @@
 import { cloneStored as clone } from "./memory-storage-helpers.js";
 import type { AuditEvent } from "./types.js";
 import type {
+  ClaimWebhookDeliveriesInput,
   ClaimedWebhookDelivery,
   ListedWebhookDelivery,
   SettleWebhookDeliveryInput,
@@ -43,12 +44,9 @@ export class MemoryWebhookStorage implements WebhookStorage {
     }
   }
 
-  async claimWebhookDeliveries(input: {
-    now: Date;
-    leaseToken: string;
-    leaseExpiresAt: Date;
-    limit: number;
-  }): Promise<ClaimedWebhookDelivery[]> {
+  async claimWebhookDeliveries(
+    input: ClaimWebhookDeliveriesInput
+  ): Promise<ClaimedWebhookDelivery[]> {
     const eligible = [...this.deliveries.values()]
       .filter((delivery) => isEligible(delivery, input.now))
       .sort((left, right) =>

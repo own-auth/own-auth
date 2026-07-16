@@ -21,6 +21,12 @@ import type {
   WebAuthnChallenge
 } from "./identity-types.js";
 
+export interface AuditEventFilter {
+  userId?: string;
+  organisationId?: string;
+  apiKeyId?: string;
+}
+
 export interface AuthStorage {
   createUser(user: User): Promise<User>;
   updateUser(id: string, patch: Partial<User>): Promise<User | null>;
@@ -94,11 +100,7 @@ export interface AuthStorage {
   ): Promise<Invitation<string> | null>;
 
   createAuditEvent(event: AuditEvent): Promise<AuditEvent>;
-  listAuditEvents(filter?: {
-    userId?: string;
-    organisationId?: string;
-    apiKeyId?: string;
-  }): Promise<AuditEvent[]>;
+  listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]>;
   deleteAuditEventsBefore(olderThan: Date): Promise<number>;
 
   createOAuthTransaction(transaction: OAuthTransaction): Promise<OAuthTransaction>;

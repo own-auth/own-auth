@@ -25,6 +25,13 @@ export interface ListedWebhookDelivery {
   eventType: StoredWebhookEvent["type"];
 }
 
+export interface ClaimWebhookDeliveriesInput {
+  now: Date;
+  leaseToken: string;
+  leaseExpiresAt: Date;
+  limit: number;
+}
+
 export interface SettleWebhookDeliveryInput {
   deliveryId: string;
   leaseToken: string;
@@ -40,12 +47,9 @@ export interface WebhookStorage {
     webhookEvent: StoredWebhookEvent,
     deliveries: readonly WebhookDeliverySeed[]
   ): Promise<void>;
-  claimWebhookDeliveries(input: {
-    now: Date;
-    leaseToken: string;
-    leaseExpiresAt: Date;
-    limit: number;
-  }): Promise<ClaimedWebhookDelivery[]>;
+  claimWebhookDeliveries(
+    input: ClaimWebhookDeliveriesInput
+  ): Promise<ClaimedWebhookDelivery[]>;
   settleWebhookDelivery(input: SettleWebhookDeliveryInput): Promise<boolean>;
   listWebhookDeliveries(input: ListWebhookDeliveriesInput): Promise<ListedWebhookDelivery[]>;
   listWebhookAttempts(deliveryIds: readonly string[]): Promise<WebhookAttempt[]>;

@@ -1,4 +1,4 @@
-import type { AuthStorage } from "../storage.js";
+import type { AuditEventFilter, AuthStorage } from "../storage.js";
 import type {
   Account,
   ApiKey,
@@ -459,11 +459,7 @@ export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
     ));
   }
 
-  async listAuditEvents(filter?: {
-    userId?: string;
-    organisationId?: string;
-    apiKeyId?: string;
-  }): Promise<AuditEvent[]> {
+  async listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]> {
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (filter?.userId) {

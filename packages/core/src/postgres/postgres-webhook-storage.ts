@@ -10,6 +10,7 @@ import {
   webhookDeliverySelection
 } from "../webhook-database-schema.js";
 import type {
+  ClaimWebhookDeliveriesInput,
   ClaimedWebhookDelivery,
   ListedWebhookDelivery,
   SettleWebhookDeliveryInput,
@@ -81,12 +82,9 @@ export class PostgresWebhookStorage implements WebhookStorage {
     );
   }
 
-  async claimWebhookDeliveries(input: {
-    now: Date;
-    leaseToken: string;
-    leaseExpiresAt: Date;
-    limit: number;
-  }): Promise<ClaimedWebhookDelivery[]> {
+  async claimWebhookDeliveries(
+    input: ClaimWebhookDeliveriesInput
+  ): Promise<ClaimedWebhookDelivery[]> {
     const result = await this.db.query<Row>(
       `with candidates as (
          select id from own_auth_webhook_deliveries

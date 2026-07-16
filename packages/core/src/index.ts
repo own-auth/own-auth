@@ -161,7 +161,7 @@ export type {
 } from "./plugin-types.js";
 export { OWN_AUTH_VERSION } from "./version.js";
 export { InMemoryAuthStorage } from "./memory-storage.js";
-export type { AuthStorage } from "./storage.js";
+export type { AuditEventFilter, AuthStorage } from "./storage.js";
 export {
   InMemoryRateLimitStore,
   enforceRateLimit
@@ -231,6 +231,7 @@ export type {
   WebhookOptions
 } from "./webhook-types.js";
 export type {
+  ClaimWebhookDeliveriesInput,
   ClaimedWebhookDelivery,
   ListedWebhookDelivery,
   SettleWebhookDeliveryInput,

@@ -11,7 +11,7 @@ import type {
   TokenType,
   User
 } from "../types.js";
-import type { AuthStorage } from "../storage.js";
+import type { AuditEventFilter, AuthStorage } from "../storage.js";
 import {
   mapAccount,
   mapApiKey,
@@ -56,8 +56,6 @@ import { withPostgresIdentityErrors } from "./postgres-errors.js";
 import { PostgresIdentityStorage } from "./postgres-identity-storage.js";
 import type { PostgresQueryable } from "./postgres-types.js";
 import { PostgresWebhookStorage } from "./postgres-webhook-storage.js";
-
-export type { PostgresQueryable, PostgresQueryResult } from "./postgres-types.js";
 
 export class PostgresAuthStorage extends PostgresIdentityStorage implements AuthStorage {
   readonly webhookStorage = new PostgresWebhookStorage(this.db);
@@ -435,11 +433,7 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
     return mapAuditEvent(row);
   }
 
-  async listAuditEvents(filter?: {
-    userId?: string;
-    organisationId?: string;
-    apiKeyId?: string;
-  }): Promise<AuditEvent[]> {
+  async listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]> {
     const clauses: string[] = [];
     const params: unknown[] = [];
 

@@ -12,6 +12,7 @@ import {
   webhookEventReturning
 } from "../webhook-database-schema.js";
 import type {
+  ClaimWebhookDeliveriesInput,
   ClaimedWebhookDelivery,
   ListedWebhookDelivery,
   SettleWebhookDeliveryInput,
@@ -76,12 +77,9 @@ export class D1WebhookStorage implements WebhookStorage {
     await this.db.batch(statements);
   }
 
-  async claimWebhookDeliveries(input: {
-    now: Date;
-    leaseToken: string;
-    leaseExpiresAt: Date;
-    limit: number;
-  }): Promise<ClaimedWebhookDelivery[]> {
+  async claimWebhookDeliveries(
+    input: ClaimWebhookDeliveriesInput
+  ): Promise<ClaimedWebhookDelivery[]> {
     const claimed: ClaimedWebhookDelivery[] = [];
     for (let index = 0; index < input.limit; index += 1) {
       const row = await this.statement(

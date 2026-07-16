@@ -2,6 +2,7 @@ import type { DatabaseRow } from "./database-types.js";
 import {
   dateValue,
   nullableDate,
+  nullableNumber,
   nullableString,
   numberValue,
   stringValue
@@ -59,8 +60,4 @@ export function mapWebhookAttempt(row: DatabaseRow): WebhookAttempt {
     errorCode: nullableString(row.error_code) as WebhookAttemptErrorCode | null,
     nextRetryAt: nullableDate(row.next_retry_at)
   };
-}
-
-function nullableNumber(value: unknown): number | null {
-  return value === null || value === undefined ? null : numberValue(value);
 }

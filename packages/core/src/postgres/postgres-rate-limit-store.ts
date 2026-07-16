@@ -1,5 +1,5 @@
 import type { RateLimitResult, RateLimitStore } from "../rate-limit.js";
-import { dateValue, numberValue } from "./postgres-row.js";
+import { dateValue, numberValue } from "../database-row.js";
 import type { PostgresQueryable, Row } from "./postgres-types.js";
 
 export class PostgresRateLimitStore implements RateLimitStore {

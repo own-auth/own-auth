@@ -1,4 +1,4 @@
-import type { AuthStorage } from "./storage.js";
+import type { AuditEventFilter, AuthStorage } from "./storage.js";
 import { MemoryIdentityStorage } from "./memory-identity-storage.js";
 import {
   cloneStored as clone,
@@ -370,11 +370,7 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     return clone(event);
   }
 
-  async listAuditEvents(filter?: {
-    userId?: string;
-    organisationId?: string;
-    apiKeyId?: string;
-  }): Promise<AuditEvent[]> {
+  async listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]> {
     return [...this.auditEvents.values()]
       .filter((event) => {
         if (filter?.userId && event.actorUserId !== filter.userId && event.targetUserId !== filter.userId) {

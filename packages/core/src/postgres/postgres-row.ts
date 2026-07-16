@@ -1,15 +1,3 @@
-export {
-  booleanValue,
-  dateValue,
-  jsonRecord,
-  nullableDate,
-  nullableNumber,
-  nullableString,
-  numberValue,
-  stringArray,
-  stringValue,
-  uint8ArrayValue
-} from "../database-row.js";
 import { expectDatabaseRow } from "../database-row.js";
 import type { Row } from "./postgres-types.js";
 
