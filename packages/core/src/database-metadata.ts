@@ -8,7 +8,8 @@ export const coreMigrationFiles = [
   "007_plugin_migrations.sql",
   "008_webhooks.sql",
   "009_custom_authorization.sql",
-  "010_administration.sql"
+  "010_administration.sql",
+  "011_authorization_server.sql"
 ] as const;
 
 export const initialMigration = coreMigrationFiles[0];
@@ -36,5 +37,13 @@ export const databaseTables = {
   pluginMigrations: "own_auth_plugin_migrations",
   webhookEvents: "own_auth_webhook_events",
   webhookDeliveries: "own_auth_webhook_deliveries",
-  webhookAttempts: "own_auth_webhook_attempts"
+  webhookAttempts: "own_auth_webhook_attempts",
+  authorizationClients: "own_auth_authorization_clients",
+  authorizationClientSecrets: "own_auth_authorization_client_secrets",
+  authorizationInteractions: "own_auth_authorization_interactions",
+  authorizationGrants: "own_auth_authorization_grants",
+  authorizationCodes: "own_auth_authorization_codes",
+  authorizationAccessTokens: "own_auth_authorization_access_tokens",
+  authorizationRefreshTokens: "own_auth_authorization_refresh_tokens",
+  oidcSubjects: "own_auth_oidc_subjects"
 } as const;

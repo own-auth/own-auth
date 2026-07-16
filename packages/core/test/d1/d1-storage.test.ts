@@ -183,6 +183,66 @@ describe("D1 persistence", () => {
     expect(database.calls[0]?.values).toEqual(["oac_1", "expected-ciphertext"]);
   });
 
+  it("rotates authorization refresh tokens in one conditional D1 batch", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).authorizationServerStorage;
+    const now = new Date("2026-07-15T12:05:00.000Z");
+    database.queue([{ grant_id: "ogrant_1" }]);
+    database.queue([]);
+    database.queue([]);
+
+    await expect(storage.rotateAuthorizationRefreshToken({
+      tokenHash: "refresh_hash_old",
+      authorizationClientId: "ocli_1",
+      replacementRefreshToken: authorizationRefreshToken(),
+      accessToken: authorizationAccessToken(),
+      rotatedAt: now
+    })).resolves.toBe("rotated");
+
+    expect(database.calls).toHaveLength(3);
+    expect(database.calls[0]?.sql).toContain("consumed_at is null");
+    expect(database.calls[0]?.sql).toContain("replaced_by_token_id is null");
+    expect(database.calls[1]?.sql).toContain(
+      "insert into own_auth_authorization_refresh_tokens"
+    );
+    expect(database.calls[2]?.sql).toContain(
+      "insert into own_auth_authorization_access_tokens"
+    );
+  });
+
+  it("revokes the D1 authorization grant family after refresh-token reuse", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).authorizationServerStorage;
+    database.queue([]);
+    database.queue([]);
+    database.queue([]);
+    database.queue([{ id: "ogrant_1" }]);
+    database.queue([]);
+    database.queue([]);
+
+    await expect(storage.rotateAuthorizationRefreshToken({
+      tokenHash: "refresh_hash_old",
+      authorizationClientId: "ocli_1",
+      replacementRefreshToken: authorizationRefreshToken(),
+      accessToken: authorizationAccessToken(),
+      rotatedAt: new Date("2026-07-15T12:05:00.000Z")
+    })).resolves.toBe("reused");
+
+    expect(database.calls).toHaveLength(6);
+    expect(database.calls[3]?.sql).toContain(
+      "update own_auth_authorization_grants"
+    );
+    expect(database.calls[4]?.sql).toContain(
+      "update own_auth_authorization_access_tokens"
+    );
+    expect(database.calls[5]?.sql).toContain(
+      "update own_auth_authorization_refresh_tokens"
+    );
+    expect(database.calls[5]?.sql).not.toContain(
+      "authorization_client_id = ?2\n           and revoked_at is null"
+    );
+  });
+
   it("maps D1 identity collisions to typed Own Auth errors", async () => {
     const database = new RecordingD1();
     const storage = new D1AuthStorage(database);
@@ -327,6 +387,39 @@ function tokenRow(usedAt: number): Record<string, unknown> {
     expires_at: usedAt + 60_000,
     used_at: usedAt,
     created_at: usedAt - 60_000
+  };
+}
+
+function authorizationAccessToken() {
+  return {
+    id: "oat_1",
+    tokenHash: "access_hash_1",
+    prefix: "oa_at_1",
+    grantId: "ogrant_1",
+    authorizationClientId: "ocli_1",
+    userId: "usr_1",
+    scopes: ["openid", "offline_access"],
+    expiresAt: new Date("2026-07-15T13:00:00.000Z"),
+    revokedAt: null,
+    createdAt: new Date("2026-07-15T12:05:00.000Z")
+  };
+}
+
+function authorizationRefreshToken() {
+  return {
+    id: "ort_2",
+    tokenHash: "refresh_hash_2",
+    prefix: "oa_rt_2",
+    grantId: "ogrant_1",
+    authorizationClientId: "ocli_1",
+    userId: "usr_1",
+    scopes: ["openid", "offline_access"],
+    generation: 1,
+    replacedByTokenId: null,
+    expiresAt: new Date("2026-08-15T12:05:00.000Z"),
+    consumedAt: null,
+    revokedAt: null,
+    createdAt: new Date("2026-07-15T12:05:00.000Z")
   };
 }
 

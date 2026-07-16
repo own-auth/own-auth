@@ -32,6 +32,7 @@ import * as sms from "./auth-engine-sms.js";
 import * as users from "./auth-engine-users.js";
 import * as webhookOperations from "./auth-engine-webhooks.js";
 import { OwnAuthAdministration } from "./auth-engine-administration.js";
+import { OwnAuthAuthorizationServer } from "./auth-engine-authorization-server.js";
 import { OwnAuthPluginRuntime, type RegisteredPluginEndpoint } from "./plugin-runtime.js";
 import type { CallOwnAuthPluginMethodOptions, OwnAuthPluginDefinition } from "./plugin-types.js";
 import type {
@@ -115,18 +116,16 @@ import type {
   RetryWebhookDeliveryInput,
   WebhookDeliveryDetails
 } from "./webhook-types.js";
-
 export type { OwnAuthOptions } from "./auth-engine-types.js";
-
 export class OwnAuth<CustomRole extends string = never, CustomPermission extends string = never> {
   readonly storage: AuthStorage;
   readonly rateLimitStore: RateLimitStore;
   readonly admin: OwnAuthAdministration;
+  readonly authorizationServer: OwnAuthAuthorizationServer;
   private readonly ctx: AuthEngineContext;
   private readonly pluginRuntime: OwnAuthPluginRuntime;
   private closed = false;
   private closePromise: Promise<void> | null = null;
-
   constructor(options: OwnAuthOptions<OwnAuthAuthorizationDefinition<CustomPermission, CustomRole>> = {}) {
     this.ctx = createAuthEngineContext(options);
     this.storage = this.ctx.storage;
@@ -139,6 +138,8 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
       options.pluginRuntime
     );
     this.admin = new OwnAuthAdministration(this.ctx, (operation, input, work) =>
+      this.executeCore(operation, input, work));
+    this.authorizationServer = new OwnAuthAuthorizationServer(this.ctx, (operation, input, work) =>
       this.executeCore(operation, input, work));
   }
 

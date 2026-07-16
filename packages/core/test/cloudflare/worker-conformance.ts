@@ -4,6 +4,7 @@ import {
   MemoryEmailProvider,
   MemorySmsProvider
 } from "../../dist/index.js";
+import type { AuthorizationServerStorage } from "../../dist/index.js";
 import {
   createD1Persistence,
   type D1DatabaseLike
@@ -58,6 +59,16 @@ const storageMethods = new Set([
   "useTotpTimestep"
 ]);
 
+const authorizationStorageMethods = new Set([
+  "createAuthorizationClient",
+  "createAuthorizationTokens",
+  "getAuthorizationAccessTokenByHash",
+  "getAuthorizationGrant",
+  "getAuthorizationRefreshTokenByHash",
+  "rotateAuthorizationRefreshToken",
+  "upsertAuthorizationGrant"
+]);
+
 const expectedMigrations = [
   "001_initial",
   "002_external_providers",
@@ -68,19 +79,28 @@ const expectedMigrations = [
   "007_plugin_migrations",
   "008_webhooks",
   "009_custom_authorization",
-  "010_administration"
+  "010_administration",
+  "011_authorization_server"
 ];
 
 const expectedTables = [
   "own_auth_accounts",
   "own_auth_api_keys",
   "own_auth_audit_events",
+  "own_auth_authorization_access_tokens",
+  "own_auth_authorization_client_secrets",
+  "own_auth_authorization_clients",
+  "own_auth_authorization_codes",
+  "own_auth_authorization_grants",
+  "own_auth_authorization_interactions",
+  "own_auth_authorization_refresh_tokens",
   "own_auth_invitations",
   "own_auth_mfa_challenges",
   "own_auth_mfa_factors",
   "own_auth_migrations",
   "own_auth_oauth_credentials",
   "own_auth_oauth_transactions",
+  "own_auth_oidc_subjects",
   "own_auth_organisation_members",
   "own_auth_organisations",
   "own_auth_passkeys",
@@ -111,6 +131,16 @@ export async function handleStorageRpc(
   const rpc = await readRpc(request);
   if (!storageMethods.has(rpc.method)) return methodNotAllowed();
   return invoke(createD1Persistence(database).storage, rpc);
+}
+
+export async function handleAuthorizationStorageRpc(
+  request: Request,
+  database: D1DatabaseLike
+): Promise<Response> {
+  const rpc = await readRpc(request);
+  if (!authorizationStorageMethods.has(rpc.method)) return methodNotAllowed();
+  const storage = createD1Persistence(database).storage.authorizationServerStorage;
+  return invoke(storage as AuthorizationServerStorage, rpc);
 }
 
 export async function handleRateLimitRpc(

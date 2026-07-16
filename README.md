@@ -431,6 +431,21 @@ Own Auth resolves the linked provider account, applies the configured account-li
 
 `signInWithVerifiedExternalIdentity` does not verify a provider token. Only call it after a trusted provider adapter has verified the token signature, issuer, audience, expiry, and nonce where required. See [External providers](./docs/external-providers.md).
 
+## OAuth And OpenID Connect Authorization Server
+
+Own Auth can also act as the OAuth and OpenID Connect server for other applications. This is separate from signing in with Google, GitHub, or Apple.
+
+Configure `authorizationServer`, create clients through `auth.authorizationServer`, and mount the separate framework-neutral protocol handler:
+
+```ts
+import { createOwnAuthAuthorizationServerHandler } from "own-auth/authorization-server";
+
+export const authorizationHandler =
+  createOwnAuthAuthorizationServerHandler(auth);
+```
+
+The server supports authorization code with PKCE, signed ID tokens, opaque access tokens, rotating refresh tokens, revocation, same-client introspection, userinfo, discovery, JWKS, consent, account selection, and AAL2 step-up. See [OAuth And OpenID Connect Authorization Server](./docs/authorization-server.md).
+
 ## Multi-Factor Authentication
 
 TOTP, one-time recovery codes, and passkeys can protect every first-factor flow. No session is created until MFA succeeds. See [Multi-Factor Authentication](./docs/mfa.md).
@@ -746,6 +761,7 @@ See [Observability](./docs/observability.md) for span hierarchy, metric names, a
 | **Permissions** | `checkPermission` `requirePermission` |
 | **Audit Logs** | `listAuditEvents` `cleanupAuditLogs` |
 | **Administration** | `auth.admin.listUsers` `auth.admin.getUser` `auth.admin.listUserSessions` `auth.admin.listUserAuditEvents` `auth.admin.disableUser` `auth.admin.enableUser` `auth.admin.revokeUserSessions` |
+| **Authorization Server** | `auth.authorizationServer.createClient` `auth.authorizationServer.listClients` `auth.authorizationServer.updateClient` `auth.authorizationServer.rotateClientSecret` `auth.authorizationServer.revokeClient` `auth.authorizationServer.getInteraction` `auth.authorizationServer.approveInteraction` `auth.authorizationServer.denyInteraction` `auth.authorizationServer.verifyAccessToken` `auth.authorizationServer.listUserGrants` `auth.authorizationServer.revokeUserGrant` |
 | **Webhooks** | `processWebhookDeliveries` `listWebhookDeliveries` `retryWebhookDelivery` `cleanupWebhookDeliveries` |
 | **Plugins** | `callPluginMethod` plus methods and endpoints declared by configured plugins |
 | **Lifecycle** | `close` |
@@ -772,6 +788,7 @@ issue for an undisclosed vulnerability.
 - [Installation](./docs/installation.md)
 - [Security Model](./docs/security-model.md)
 - [OAuth And External Providers](./docs/external-providers.md)
+- [OAuth And OpenID Connect Authorization Server](./docs/authorization-server.md)
 - [Multi-Factor Authentication](./docs/mfa.md)
 - [Passkeys](./docs/passkeys.md)
 - [Plugins](./docs/plugins.md)

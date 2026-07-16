@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RateLimitStore } from "../packages/core/src/rate-limit.js";
 import type { AuthStorage } from "../packages/core/src/storage.js";
+import type { AuthorizationServerStorage } from "../packages/core/src/authorization-server-storage.js";
 import {
   atomicAdapterCases,
   type AtomicAdapterHarness
@@ -26,6 +27,9 @@ import {
   type ConformanceRpcError,
   type ConformanceRpcRequest
 } from "../packages/core/test/cloudflare/conformance-protocol.js";
+import {
+  assertAuthorizationRefreshRace
+} from "./authorization-server-conformance.js";
 
 const root = new URL("..", import.meta.url);
 const config = "packages/core/test/cloudflare/wrangler.jsonc";
@@ -49,6 +53,10 @@ try {
   await assertWebhookVerifier(origin);
   await assertChecks(await postAction(`${origin}/conformance/schema`), "D1 schema");
   await assertChecks(await postAction(`${origin}/conformance/webhook-flow`), "D1 webhook flow");
+  await assertAuthorizationRefreshRace(
+    createRemoteProxy<AuthStorage>(origin, "storage"),
+    createRemoteProxy<AuthorizationServerStorage>(origin, "authorization-storage")
+  );
 
   for (const testCase of atomicAdapterCases) {
     await runCase("D1 atomic adapter conformance", testCase.name, () =>
@@ -128,7 +136,7 @@ function createRemoteAuthHarness(
 
 function createRemoteProxy<T extends object>(
   origin: string,
-  resource: "auth" | "storage" | "rate-limit",
+  resource: "auth" | "storage" | "rate-limit" | "authorization-storage",
   options?: ConformanceRpcRequest["options"]
 ): T {
   return new Proxy({}, {

@@ -58,10 +58,12 @@ import {
 } from "./postgres-atomic-operations.js";
 import { withPostgresIdentityErrors } from "./postgres-errors.js";
 import { PostgresIdentityStorage } from "./postgres-identity-storage.js";
+import { PostgresAuthorizationServerStorage } from "./postgres-authorization-server-storage.js";
 import type { PostgresQueryable } from "./postgres-types.js";
 import { PostgresWebhookStorage } from "./postgres-webhook-storage.js";
 
 export class PostgresAuthStorage extends PostgresIdentityStorage implements AuthStorage {
+  readonly authorizationServerStorage = new PostgresAuthorizationServerStorage(this.db);
   readonly webhookStorage = new PostgresWebhookStorage(this.db);
 
   async createUser(user: User): Promise<User> {

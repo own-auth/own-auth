@@ -1,5 +1,71 @@
 export { OwnAuth } from "./auth-engine.js";
 export { createOwnAuth } from "./create-own-auth.js";
+export { OwnAuthAuthorizationServer } from "./auth-engine-authorization-server.js";
+export {
+  createOwnAuthAuthorizationServerHandler
+} from "./authorization-server-http.js";
+export type {
+  OwnAuthAuthorizationServerHandler,
+  OwnAuthAuthorizationServerHandlerOptions
+} from "./authorization-server-http.js";
+export { AuthorizationProtocolError } from "./authorization-server-protocol-error.js";
+export type {
+  AuthorizationProtocolErrorCode
+} from "./authorization-server-protocol-error.js";
+export {
+  isAuthorizationServerCapableStorage
+} from "./authorization-server-storage.js";
+export type {
+  AuthorizationServerCapableStorage,
+  AuthorizationServerStorage,
+  RotateAuthorizationRefreshTokenInput,
+  RotateAuthorizationRefreshTokenResult
+} from "./authorization-server-storage.js";
+export type {
+  AuthorizationAccessToken,
+  AuthorizationApplicationType,
+  AuthorizationClient,
+  AuthorizationClientSecret,
+  AuthorizationClientStatus,
+  AuthorizationClientType,
+  AuthorizationCode,
+  AuthorizationGrant,
+  AuthorizationInteraction,
+  AuthorizationInteractionAction,
+  AuthorizationInteractionStatus,
+  AuthorizationIntrospectionResponse,
+  AuthorizationMetadata,
+  AuthorizationPrompt,
+  AuthorizationProtocolErrorShape,
+  AuthorizationRedirectResult,
+  AuthorizationRefreshToken,
+  AuthorizationRequestInput,
+  AuthorizationScopeDefinition,
+  AuthorizationServerOptions,
+  AuthorizationServerPreviousSigningKeyInput,
+  AuthorizationServerSigningKeyInput,
+  AuthorizationTokenActionInput,
+  AuthorizationTokenRequestInput,
+  AuthorizationTokenResponse,
+  AuthorizationUserGrant,
+  AuthorizationUserInfo,
+  CompleteAuthorizationInteractionInput,
+  CreatedAuthorizationClient,
+  CreateAuthorizationClientInput,
+  DenyAuthorizationInteractionInput,
+  GetAuthorizationInteractionInput,
+  ListAuthorizationUserGrantsInput,
+  OidcSubject,
+  PublicAuthorizationInteraction,
+  RevokeAuthorizationClientInput,
+  RevokeAuthorizationUserGrantInput,
+  RotateAuthorizationClientSecretInput,
+  StoredAuthorizationRequest,
+  TokenEndpointAuthMethod,
+  UpdateAuthorizationClientInput,
+  VerifiedAuthorizationAccessToken,
+  VerifyAuthorizationAccessTokenInput
+} from "./authorization-server-types.js";
 export {
   administrationActions,
   isAdministrationCapableStorage

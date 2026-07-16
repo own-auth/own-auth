@@ -36,7 +36,7 @@ describe("own-auth CLI", () => {
     expect(output().stdout).toContain("create table if not exists own_auth_migrations");
     expect(output().stdout).toContain("create table if not exists own_auth_users");
     expect(output().stdout).toContain("002_external_providers");
-    expect(output().stdout).toContain("010_administration");
+    expect(output().stdout).toContain("011_authorization_server");
     expect(output().stdout).toContain(
       "references own_auth_webhook_deliveries(id) on delete cascade"
     );
@@ -126,7 +126,7 @@ describe("own-auth CLI", () => {
     expect(exitCode).toBe(0);
     expect(output().stdout).toBe(
       "Database: connected\n" +
-      "Migration version: 010_administration\n" +
+      "Migration version: 011_authorization_server\n" +
       "Status: current\n"
     );
     expect(output().stderr).toBe("");

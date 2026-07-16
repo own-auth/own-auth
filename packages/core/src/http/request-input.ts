@@ -47,7 +47,10 @@ export function pluginInputContract(input: JsonSchema | undefined, method: strin
   };
 }
 
-async function readLimitedBody(request: Request, maxBytes: number): Promise<string> {
+export async function readLimitedBody(
+  request: Request,
+  maxBytes: number
+): Promise<string> {
   const contentLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw tooLarge();

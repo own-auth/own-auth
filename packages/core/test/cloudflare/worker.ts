@@ -2,6 +2,7 @@ import type { D1DatabaseLike } from "../../dist/d1/index.js";
 import {
   conformanceErrorResponse,
   handleAuthRpc,
+  handleAuthorizationStorageRpc,
   handleCloseLifecycle,
   handleWebhookFlow,
   handleInspection,
@@ -24,6 +25,8 @@ export default {
       switch (path) {
         case "/conformance/auth":
           return await handleAuthRpc(request, env.DB);
+        case "/conformance/authorization-storage":
+          return await handleAuthorizationStorageRpc(request, env.DB);
         case "/conformance/storage":
           return await handleStorageRpc(request, env.DB);
         case "/conformance/rate-limit":

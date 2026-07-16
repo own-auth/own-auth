@@ -56,12 +56,14 @@ import {
   atomicConsumeD1Token,
   atomicIncrementD1SmsOtpAttempts
 } from "./d1-atomic-operations.js";
+import { D1AuthorizationServerStorage } from "./d1-authorization-server-storage.js";
 import { rethrowD1IdentityError } from "./d1-errors.js";
 import { D1IdentityStorage } from "./d1-identity-storage.js";
 import type { D1DatabaseLike } from "./d1-types.js";
 import { D1WebhookStorage } from "./d1-webhook-storage.js";
 
 export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
+  readonly authorizationServerStorage = new D1AuthorizationServerStorage(this.db);
   readonly webhookStorage = new D1WebhookStorage(this.db);
   async createUser(user: User): Promise<User> {
     try {

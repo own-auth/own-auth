@@ -64,6 +64,10 @@
       "types": "./dist/http/index.d.ts",
       "default": "./dist/http/index.js"
     },
+    "./authorization-server": {
+      "types": "./dist/authorization-server-http.d.ts",
+      "default": "./dist/authorization-server-http.js"
+    },
     "./react": {
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
@@ -90,6 +94,7 @@
     "./migrations/008_webhooks.sql": "./migrations/008_webhooks.sql",
     "./migrations/009_custom_authorization.sql": "./migrations/009_custom_authorization.sql",
     "./migrations/010_administration.sql": "./migrations/010_administration.sql",
+    "./migrations/011_authorization_server.sql": "./migrations/011_authorization_server.sql",
     "./migrations/d1/*.sql": "./migrations/d1/*.sql",
     "./docs/installation.md": "./docs/installation.md",
     "./docs/cloudflare-d1.md": "./docs/cloudflare-d1.md",
@@ -109,6 +114,7 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "jiti": "^2.7.0",
+    "jose": "^6.2.3",
     "oauth4webapi": "^3.8.6",
     "otpauth": "^9.5.1",
     "pg": "^8.16.3"

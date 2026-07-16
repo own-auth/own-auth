@@ -75,6 +75,14 @@ This creates the tables Own Auth needs in your database:
 - `own_auth_webhook_events`
 - `own_auth_webhook_deliveries`
 - `own_auth_webhook_attempts`
+- `own_auth_authorization_clients`
+- `own_auth_authorization_client_secrets`
+- `own_auth_authorization_interactions`
+- `own_auth_authorization_grants`
+- `own_auth_authorization_codes`
+- `own_auth_authorization_access_tokens`
+- `own_auth_authorization_refresh_tokens`
+- `own_auth_oidc_subjects`
 
 All Own Auth tables are prefixed with `own_auth_` to avoid conflicts. Your existing application tables are not modified.
 

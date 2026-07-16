@@ -197,6 +197,13 @@
           "source": "docs/http-handler.md"
         },
         {
+          "title": "OAuth And OpenID Connect Server",
+          "description": "Let other applications authorize users through Own Auth with PKCE, OpenID Connect, rotating refresh tokens, revocation, introspection, userinfo, discovery, and JWKS.",
+          "href": "/docs/authorization-server",
+          "slug": ["authorization-server"],
+          "source": "docs/authorization-server.md"
+        },
+        {
           "title": "TypeScript Client",
           "description": "Call the Own Auth HTTP handler from browser TypeScript or React with typed methods and shared current-session state.",
           "href": "/docs/typescript-client",

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Optional OAuth 2.1 and OpenID Connect authorization-server support through `auth.authorizationServer` and the separate `own-auth/authorization-server` protocol handler.
+- Authorization code with PKCE, RS256 ID tokens, opaque access tokens, rotating refresh tokens, revocation, same-client introspection, userinfo, discovery metadata, and JWKS.
+- Migration `011_authorization_server` for clients, hashed client secrets, encrypted interactions, grants, single-use codes, opaque tokens, and stable OIDC subjects in Postgres and Cloudflare D1.
+
+### Security
+
+- Authorization interactions and codes are single-use, client redirect URIs match exactly, PKCE S256 is required, and unauthenticated interaction reads do not reveal client or scope details.
+- Refresh-token reuse revokes the complete grant family, including a replacement token created by a concurrent winning request.
+- Authorization requests and OIDC nonces use the encryption key ring with the separate `own-auth:authorization-request:v1` derivation label.
+
 ## 0.3.2
 
 ### Documentation

@@ -19,6 +19,9 @@ Own Auth applies built-in rate limits to sensitive authentication entry points. 
 | OAuth callback | IP address, when available | 30 | 10 minutes |
 | Google One Tap prepare | IP address, when available | 20 | 10 minutes |
 | Google One Tap verify | IP address, when available | 30 | 10 minutes |
+| Authorization-server start | IP address, when available | 60 | 10 minutes |
+| Authorization-server interaction completion | User ID | 30 | 10 minutes |
+| Authorization-server token, revocation, and introspection endpoints | IP address, otherwise client ID | 120 | 10 minutes |
 | API-key creation | User or organisation owner | 20 | 1 hour |
 | Organisation invite | Organisation ID | 10 | 1 hour |
 

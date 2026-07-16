@@ -1,7 +1,10 @@
 import { AuthError } from "./errors.js";
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
 
-export type EncryptionPurpose = "totp" | "oauth-refresh";
+export type EncryptionPurpose =
+  | "totp"
+  | "oauth-refresh"
+  | "authorization-request";
 
 export interface EncryptionKeyInput {
   id: string;
@@ -26,7 +29,8 @@ export interface DecryptedValue {
 
 const purposeLabels: Record<EncryptionPurpose, string> = {
   totp: "own-auth:totp:v1",
-  "oauth-refresh": "own-auth:oauth-refresh:v1"
+  "oauth-refresh": "own-auth:oauth-refresh:v1",
+  "authorization-request": "own-auth:authorization-request:v1"
 };
 
 export class EncryptionKeyRing {

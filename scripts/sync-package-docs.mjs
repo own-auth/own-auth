@@ -80,12 +80,16 @@ function publicApiSnapshot() {
   const index = sourceFile("packages/core/src/index.ts");
   const authEngine = sourceFile("packages/core/src/auth-engine.ts");
   const administration = sourceFile("packages/core/src/auth-engine-administration.ts");
+  const authorizationServer = sourceFile(
+    "packages/core/src/auth-engine-authorization-server.ts"
+  );
   const options = sourceFile("packages/core/src/auth-engine-options.ts");
   const errors = sourceFile("packages/core/src/errors.ts");
   const exportedValues = [];
   const exportedTypes = [];
   const methods = [];
   const administrationMethods = [];
+  const authorizationServerMethods = [];
   const optionNames = [];
   const errorCodes = [];
 
@@ -139,6 +143,25 @@ function publicApiSnapshot() {
     }
   }
 
+  for (const statement of authorizationServer.statements) {
+    if (
+      !ts.isClassDeclaration(statement) ||
+      statement.name?.text !== "OwnAuthAuthorizationServer"
+    ) {
+      continue;
+    }
+    for (const member of statement.members) {
+      if (
+        ts.isMethodDeclaration(member) &&
+        member.name &&
+        ts.isIdentifier(member.name) &&
+        !hasInternalTag(member)
+      ) {
+        authorizationServerMethods.push(member.name.text);
+      }
+    }
+  }
+
   for (const statement of options.statements) {
     if (!ts.isInterfaceDeclaration(statement) || statement.name.text !== "OwnAuthOptions") {
       continue;
@@ -168,7 +191,10 @@ function publicApiSnapshot() {
     errorCodes: errorCodes.sort(),
     exports: exportedValues.sort(),
     methods: methods.sort(),
-    namespaces: { admin: administrationMethods.sort() },
+    namespaces: {
+      admin: administrationMethods.sort(),
+      authorizationServer: authorizationServerMethods.sort()
+    },
     options: optionNames.sort(),
     typeExports: exportedTypes.sort()
   };

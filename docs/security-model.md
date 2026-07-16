@@ -68,6 +68,20 @@ Explicit provider linking is the default. A matching verified email does not sil
 
 Popup callbacks post only completion state to the exact stored opener origin. OAuth codes, provider tokens, session tokens, and MFA challenge tokens never enter `postMessage`.
 
+## OAuth and OpenID Connect authorization server
+
+The optional authorization server requires authorization code with PKCE S256. Redirect URIs match the client's registered value exactly.
+
+Interaction handles, authorization codes, access tokens, refresh tokens, and client secrets are random and stored only as peppered hashes. Authorization requests and OIDC nonces are encrypted with authenticated metadata.
+
+Refresh tokens rotate on every use. Reuse revokes the complete grant family, including an access or refresh token created by a concurrent winning request.
+
+ID tokens use RS256 and publish only public key material through JWKS. OIDC subjects are random, stable per user, deleted with the user, and never reassigned.
+
+Unauthenticated interaction reads do not reveal the client or requested scopes. `prompt=select_account` always reaches the interaction page, while `prompt=none` fails instead of showing UI.
+
+See [OAuth And OpenID Connect Authorization Server](/docs/authorization-server) for the protocol and application integration contract.
+
 ## Organisation permissions
 
 Organisation reads and mutations verify the actor's active membership and required role permission. This includes members, invitations, organisation API keys, and organisation audit events. Owners and administrators receive explicit permission sets, while members receive only member-level access.
@@ -108,7 +122,7 @@ The exception is sign-up. `signUpEmailPassword` throws `email_already_exists` wh
 
 ## Token pepper
 
-The token pepper (`OWN_AUTH_TOKEN_PEPPER`) adds a secret component to token, session, and API-key hashing. It serves as a defense-in-depth layer:
+The token pepper (`OWN_AUTH_TOKEN_PEPPER`) adds a secret component to token, session, API-key, OAuth client-secret, and authorization-server token hashing. It serves as a defense-in-depth layer:
 
 - Without the pepper, an attacker with database access could attempt offline brute-force attacks against stored hashes.
 - With the pepper, the attacker also needs the pepper value, which is stored in the environment rather than the database.
@@ -123,7 +137,7 @@ If the pepper may have been compromised, rotate it. Changing the pepper is equiv
 
 ## Encryption key ring
 
-TOTP secrets and optional provider refresh credentials use AES-256-GCM with a new 96-bit nonce and authenticated record metadata. HKDF-SHA256 derives separate keys for `own-auth:totp:v1` and `own-auth:oauth-refresh:v1`, so ciphertext from one purpose cannot be used as the other.
+TOTP secrets, optional provider refresh credentials, and authorization-server request state use AES-256-GCM with a new 96-bit nonce and authenticated record metadata. HKDF-SHA256 derives separate keys for `own-auth:totp:v1`, `own-auth:oauth-refresh:v1`, and `own-auth:authorization-request:v1`, so ciphertext from one purpose cannot be used as another.
 
 The current key encrypts and decrypts. Previous keys decrypt only, and successful reads rotate old ciphertext to the current key. Unknown key IDs fail closed with `encryption_key_unavailable`.
 

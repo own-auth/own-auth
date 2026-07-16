@@ -19,6 +19,18 @@ Audit logs record who performed an authentication action, who or what it affecte
 | `oauth.credential_stored` | An encrypted provider refresh credential is stored. |
 | `oauth.credential_refreshed` | A provider access token is refreshed server-side. |
 | `oauth.credential_revoked` | Provider offline access is revoked and the local credential is deleted. |
+| `authorization_server.client_created` | An OAuth client is registered. |
+| `authorization_server.client_updated` | An OAuth client's safe configuration changes. |
+| `authorization_server.client_secret_rotated` | A confidential client receives a replacement secret. |
+| `authorization_server.client_revoked` | A client and its grants are revoked. |
+| `authorization_server.authorization_started` | An authorization request starts. |
+| `authorization_server.authorization_approved` | A user approves an authorization request. |
+| `authorization_server.authorization_denied` | A user denies an authorization request. |
+| `authorization_server.code_exchanged` | A single-use authorization code is exchanged. |
+| `authorization_server.token_refreshed` | A refresh token rotates successfully. |
+| `authorization_server.token_revoked` | A client revokes one of its tokens. |
+| `authorization_server.refresh_reuse_detected` | A consumed refresh token is presented again. |
+| `authorization_server.grant_revoked` | An authorization grant is revoked by the user, client, or reuse detection. |
 | `mfa.totp_enrollment_started` | TOTP enrollment starts. |
 | `mfa.totp_enabled` | A TOTP factor is confirmed and enabled. |
 | `mfa.totp_disabled` | A TOTP factor is disabled. |

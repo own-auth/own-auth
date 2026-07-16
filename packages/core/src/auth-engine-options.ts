@@ -11,6 +11,7 @@ import type {
 import type { WebhookOptions } from "./webhook-types.js";
 import type { AnyOwnAuthAuthorizationDefinition } from "./authorization.js";
 import type { AdministrationOptions } from "./administration.js";
+import type { AuthorizationServerOptions } from "./authorization-server-types.js";
 
 export const minute = 60 * 1000;
 export const hour = 60 * minute;
@@ -62,6 +63,7 @@ export interface OwnAuthOptions<
   passkeys?: PasskeyOptions;
   webhooks?: WebhookOptions;
   administration?: AdministrationOptions;
+  authorizationServer?: AuthorizationServerOptions;
   authorization?: Authorization;
   plugins?: readonly OwnAuthPluginDefinition[];
   pluginRuntime?: OwnAuthPluginRuntimeOptions;

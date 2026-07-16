@@ -34,6 +34,14 @@ import {
   isAdministrationCapableStorage,
   type AdministrationOptions
 } from "./administration.js";
+import {
+  normalizeAuthorizationServerOptions,
+  type AuthorizationServerRuntimeConfig
+} from "./authorization-server-config.js";
+import {
+  isAuthorizationServerCapableStorage,
+  type AuthorizationServerStorage
+} from "./authorization-server-storage.js";
 
 export interface AuthEngineContext {
   storage: AuthStorage;
@@ -64,6 +72,8 @@ export interface AuthEngineContext {
   webhooks: WebhookRuntimeConfig | null;
   webhookStorage: WebhookStorage | null;
   administration: Readonly<AdministrationOptions> | null;
+  authorizationServer: AuthorizationServerRuntimeConfig | null;
+  authorizationServerStorage: AuthorizationServerStorage | null;
   authorization: AuthorizationRegistry;
   closePersistence(): Promise<void>;
 }
@@ -99,6 +109,22 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
       "The configured storage adapter does not implement listUsers()."
     );
   }
+  const authorizationServer = normalizeAuthorizationServerOptions(
+    options.authorizationServer
+  );
+  const authorizationServerStorage =
+    authorizationServer && isAuthorizationServerCapableStorage(persistence.storage)
+      ? persistence.storage.authorizationServerStorage
+      : null;
+  if (authorizationServer && !authorizationServerStorage) {
+    throw new Error(
+      "OAuth/OIDC authorization-server support requires storage that implements " +
+      "AuthorizationServerCapableStorage."
+    );
+  }
+  if (authorizationServer && !encryption) {
+    throw new Error("OAuth/OIDC authorization-server support requires encryption configuration");
+  }
 
   return {
     storage: persistence.storage,
@@ -129,6 +155,8 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     webhooks,
     webhookStorage,
     administration,
+    authorizationServer,
+    authorizationServerStorage,
     authorization: createAuthorizationRegistry(options.authorization),
     closePersistence: persistence.close
   };

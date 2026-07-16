@@ -118,9 +118,9 @@ Storage, rate limiting, email, and SMS can be replaced with adapters through `st
 
 ### `tokenPepper`
 
-A secret string used when hashing sessions, auth links, SMS codes, and API keys before storing them. If this option is omitted, Own Auth reads `OWN_AUTH_TOKEN_PEPPER` from the environment.
+A secret string used when hashing sessions, auth links, SMS codes, API keys, OAuth client secrets, authorization codes, and OAuth access and refresh tokens before storing them. If this option is omitted, Own Auth reads `OWN_AUTH_TOKEN_PEPPER` from the environment.
 
-It is required in production. Generate it once, keep it secret, and do not change it unless you intend to invalidate existing sessions, links, codes, and API keys.
+It is required in production. Generate it once, keep it secret, and do not change it unless you intend to invalidate existing sessions, links, codes, API keys, OAuth client secrets, and authorization-server tokens.
 
 ### `baseUrl`
 
@@ -280,9 +280,37 @@ Configure Google, GitHub, and Apple under `oauth.providers`. Each provider needs
 
 See [OAuth And External Providers](/docs/external-providers) for provider-specific setup and account-linking behavior.
 
+### OAuth and OpenID Connect authorization server
+
+`authorizationServer` makes the application an OAuth 2.1 and OpenID Connect provider for other applications. It is separate from `oauth`, which signs users into the application with Google, GitHub, or Apple.
+
+```ts
+const auth = createOwnAuth({
+  tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
+  encryption: {
+    current: {
+      id: "2026-01",
+      key: process.env.OWN_AUTH_ENCRYPTION_KEY!,
+    },
+  },
+  authorizationServer: {
+    issuer: "https://auth.example.com",
+    interactionUrl: "https://auth.example.com/authorize",
+    signingKeys: {
+      current: {
+        id: "2026-01",
+        privateKey: process.env.OWN_AUTH_SIGNING_PRIVATE_KEY!,
+      },
+    },
+  },
+});
+```
+
+The authorization server requires the shared encryption key ring and migration `011_authorization_server`. See [OAuth And OpenID Connect Authorization Server](/docs/authorization-server) for client registration, protocol routes, interaction pages, token verification, refresh rotation, and signing-key rotation.
+
 ### Encryption
 
-The shared encryption key ring protects TOTP secrets and optional OAuth refresh credentials.
+The shared encryption key ring protects TOTP secrets, optional external-provider refresh credentials, and OAuth authorization-server request state.
 
 ```ts
 const auth = createOwnAuth({

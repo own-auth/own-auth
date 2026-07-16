@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createOwnAuth,
   MemoryEmailProvider,
@@ -62,6 +62,116 @@ describeWithDatabase("Postgres concurrency integration", () => {
       );
     });
   }
+
+  it("revokes the refresh-token winner when the original token is reused concurrently", async () => {
+    const [first, second] = await database.connectPair();
+    const storage = [
+      new PostgresAuthStorage(first),
+      new PostgresAuthStorage(second)
+    ] as const;
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const future = new Date(now.getTime() + 60_000);
+    const userId = `usr_${id}`;
+    const clientId = `ocli_${id}`;
+    const grantId = `ogrant_${id}`;
+
+    try {
+      await storage[0].createUser({
+        id: userId,
+        email: `${id}@example.com`,
+        emailVerifiedAt: now,
+        phone: null,
+        phoneVerifiedAt: null,
+        passwordHash: null,
+        name: null,
+        imageUrl: null,
+        disabledAt: null,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null
+      });
+      await storage[0].authorizationServerStorage.createAuthorizationClient({
+        id: clientId,
+        clientId: `oa_client_${id}`,
+        name: "Concurrent client",
+        clientType: "public",
+        applicationType: "web",
+        tokenEndpointAuthMethod: "none",
+        redirectUris: ["https://client.example.com/callback"],
+        allowedScopes: ["openid", "offline_access"],
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        revokedAt: null
+      }, null);
+      await storage[0].authorizationServerStorage.upsertAuthorizationGrant({
+        id: grantId,
+        authorizationClientId: clientId,
+        userId,
+        scopes: ["openid", "offline_access"],
+        createdAt: now,
+        updatedAt: now,
+        revokedAt: null
+      });
+      await storage[0].authorizationServerStorage.createAuthorizationTokens(
+        accessToken(`initial_${id}`, grantId, clientId, userId, now, future),
+        refreshToken(`initial_${id}`, grantId, clientId, userId, now, future, 0)
+      );
+
+      const attempts = [0, 1].map((index) => ({
+        access: accessToken(
+          `winner_${index}_${id}`,
+          grantId,
+          clientId,
+          userId,
+          now,
+          future
+        ),
+        refresh: refreshToken(
+          `winner_${index}_${id}`,
+          grantId,
+          clientId,
+          userId,
+          now,
+          future,
+          1
+        )
+      }));
+      const results = await Promise.all(attempts.map((attempt, index) =>
+        storage[index as 0 | 1].authorizationServerStorage.rotateAuthorizationRefreshToken({
+          tokenHash: `refresh_hash_initial_${id}`,
+          authorizationClientId: clientId,
+          replacementRefreshToken: attempt.refresh,
+          accessToken: attempt.access,
+          rotatedAt: new Date()
+        })
+      ));
+
+      expect(results.sort()).toEqual(["reused", "rotated"]);
+      await expect(
+        storage[0].authorizationServerStorage.getAuthorizationGrant(clientId, userId)
+      ).resolves.toMatchObject({ revokedAt: expect.any(Date) });
+      const accessTokens = await Promise.all(attempts.map(({ access }) =>
+        storage[0].authorizationServerStorage.getAuthorizationAccessTokenByHash(
+          access.tokenHash
+        )
+      ));
+      const refreshTokens = await Promise.all(attempts.map(({ refresh }) =>
+        storage[0].authorizationServerStorage.getAuthorizationRefreshTokenByHash(
+          refresh.tokenHash
+        )
+      ));
+      expect(accessTokens.filter(Boolean)).toHaveLength(1);
+      expect(accessTokens.filter(Boolean)[0]?.revokedAt).toBeInstanceOf(Date);
+      expect(refreshTokens.filter(Boolean)).toHaveLength(1);
+      expect(refreshTokens.filter(Boolean)[0]?.revokedAt).toBeInstanceOf(Date);
+    } finally {
+      first.release();
+      second.release();
+    }
+  });
 });
 
 type Auth = ReturnType<typeof createOwnAuth>;
@@ -141,5 +251,53 @@ function createTwoPartyBarrier(): () => Promise<void> {
       release?.();
     }
     await ready;
+  };
+}
+
+function accessToken(
+  suffix: string,
+  grantId: string,
+  authorizationClientId: string,
+  userId: string,
+  createdAt: Date,
+  expiresAt: Date
+) {
+  return {
+    id: `oat_${suffix}`,
+    tokenHash: `access_hash_${suffix}`,
+    prefix: `oa_at_${suffix}`,
+    grantId,
+    authorizationClientId,
+    userId,
+    scopes: ["openid", "offline_access"],
+    expiresAt,
+    revokedAt: null,
+    createdAt
+  };
+}
+
+function refreshToken(
+  suffix: string,
+  grantId: string,
+  authorizationClientId: string,
+  userId: string,
+  createdAt: Date,
+  expiresAt: Date,
+  generation: number
+) {
+  return {
+    id: `ort_${suffix}`,
+    tokenHash: `refresh_hash_${suffix}`,
+    prefix: `oa_rt_${suffix}`,
+    grantId,
+    authorizationClientId,
+    userId,
+    scopes: ["openid", "offline_access"],
+    generation,
+    replacedByTokenId: null,
+    expiresAt,
+    consumedAt: null,
+    revokedAt: null,
+    createdAt
   };
 }
