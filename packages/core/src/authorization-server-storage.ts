@@ -240,3 +240,14 @@ export function isDpopCapableAuthorizationServerStorage(
     (method) => typeof dpopStorage?.[method as keyof DpopStorage] === "function"
   );
 }
+
+export {
+  isDeviceAuthorizationCapableStorage
+} from "./authorization-server-device-storage.js";
+export type {
+  ApproveDeviceAuthorizationStorageInput,
+  DenyDeviceAuthorizationStorageInput,
+  DeviceAuthorizationCapableAuthorizationServerStorage,
+  DeviceAuthorizationStorage,
+  PollDeviceAuthorizationInput
+} from "./authorization-server-device-storage.js";

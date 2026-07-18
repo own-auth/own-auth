@@ -8,32 +8,30 @@ import {
   verifyAndConsumeDpopProof
 } from "./authorization-server-dpop.js";
 import {
-  authorizationTokenPrefix,
   calculateCodeChallenge,
-  createAccessToken,
-  createRefreshToken,
   decryptAuthorizationNonce,
   hashAuthorizationSecret,
-  normalizeProtectedResourceIdentifier,
   requireAuthorizationServer
 } from "./authorization-server-helpers.js";
-import {
-  authorizationTokenScopesAreActive,
-  isActiveProtectedResource
-} from "./authorization-server-protected-resources.js";
+import { authorizationTokenScopesAreActive } from "./authorization-server-protected-resources.js";
 import { AuthorizationProtocolError } from "./authorization-server-protocol-error.js";
 import { rateLimitAuthorizationServerProtocol } from "./authorization-server-rate-limits.js";
 import type {
-  AuthorizationAccessToken,
   AuthorizationClient,
-  AuthorizationRefreshToken,
-  ProtectedResource,
   AuthorizationTokenRequestInput,
   AuthorizationTokenResponse
 } from "./authorization-server-types.js";
-import { createId } from "./crypto.js";
+import { deviceAuthorizationGrantType } from "./authorization-server-device-types.js";
+import { exchangeDeviceAuthorizationToken } from "./authorization-server-device-token.js";
 import { isExpired } from "./normalise.js";
-import type { Session, User } from "./types.js";
+import {
+  authorizationTokenResponse,
+  createAuthorizationTokenPair,
+  invalidAuthorizationGrant,
+  loadAuthorizationTokenResource,
+  optionalAuthorizationResource,
+  usableAuthorizationSession
+} from "./authorization-server-token-issuance.js";
 
 export async function exchangeAuthorizationToken(
   ctx: AuthEngineContext,
@@ -46,10 +44,16 @@ export async function exchangeAuthorizationToken(
     throw new AuthorizationProtocolError("invalid_request", "grant_type is required");
   }
   if (input.grantType === "authorization_code") {
+    assertClientGrantType(client, "authorization_code");
     return exchangeAuthorizationCode(ctx, client, input);
   }
   if (input.grantType === "refresh_token") {
+    assertClientGrantType(client, "refresh_token");
     return exchangeRefreshToken(ctx, client, input);
+  }
+  if (input.grantType === deviceAuthorizationGrantType) {
+    assertClientGrantType(client, deviceAuthorizationGrantType);
+    return exchangeDeviceAuthorizationToken(ctx, client, input);
   }
   throw new AuthorizationProtocolError(
     "unsupported_grant_type",
@@ -70,7 +74,7 @@ async function exchangeAuthorizationCode(
   );
   const redirectUri = requiredText(input.redirectUri, "redirect_uri");
   const codeVerifier = requiredText(input.codeVerifier, "code_verifier");
-  const requestedResource = optionalResource(input.resource);
+  const requestedResource = optionalAuthorizationResource(input.resource);
   const codeChallenge = await calculateCodeChallenge(codeVerifier);
   const codeHash = hashAuthorizationSecret(ctx, rawCode);
   const exchangedAt = new Date();
@@ -85,7 +89,7 @@ async function exchangeAuthorizationCode(
         now: exchangedAt
       })
     : null;
-  if (ctx.authorizationServer?.dpop && !dpopBinding) throw invalidGrant();
+  if (ctx.authorizationServer?.dpop && !dpopBinding) throw invalidAuthorizationGrant();
   await verifyAndConsumeDpopProof(ctx, {
     proof: input.dpopProof,
     expectedJkt: dpopBinding?.dpopJkt ?? null,
@@ -112,9 +116,9 @@ async function exchangeAuthorizationCode(
         requestedResource,
         exchangedAt
       );
-  if (!code) throw invalidGrant();
+  if (!code) throw invalidAuthorizationGrant();
   if ((code.dpopJkt ?? null) !== (dpopBinding?.dpopJkt ?? null)) {
-    throw invalidGrant();
+    throw invalidAuthorizationGrant();
   }
 
   const [grant, user, sessions, resource] = await Promise.all([
@@ -125,7 +129,7 @@ async function exchangeAuthorizationCode(
     ),
     ctx.storage.getUserById(code.userId),
     ctx.storage.listSessionsByUserId(code.userId),
-    loadTokenResource(ctx, code.protectedResourceId, requestedResource)
+    loadAuthorizationTokenResource(ctx, code.protectedResourceId, requestedResource)
   ]);
   const session = sessions.find((candidate) => candidate.id === code.sessionId) ?? null;
   if (
@@ -134,13 +138,13 @@ async function exchangeAuthorizationCode(
     grant.revokedAt ||
     !user ||
     user.disabledAt ||
-    !usableSession(session) ||
+    !usableAuthorizationSession(session) ||
     !authorizationTokenScopesAreActive(resource, grant?.scopes ?? [], code.scopes)
   ) {
-    throw invalidGrant();
+    throw invalidAuthorizationGrant();
   }
 
-  const issued = createTokenPair(
+  const issued = createAuthorizationTokenPair(
     ctx,
     client,
     grant.id,
@@ -183,7 +187,7 @@ async function exchangeAuthorizationCode(
       ...(resource ? { protectedResourceId: resource.id } : {})
     }
   });
-  return tokenResponse(
+  return authorizationTokenResponse(
     issued.access.raw,
     issued.access.entity.expiresAt,
     code.scopes,
@@ -205,7 +209,7 @@ async function exchangeRefreshToken(
     authorizationServerTokenPrefixes.refreshToken
   );
   const tokenHash = hashAuthorizationSecret(ctx, rawRefreshToken);
-  const requestedResource = optionalResource(input.resource);
+  const requestedResource = optionalAuthorizationResource(input.resource);
   const current = await storage.getAuthorizationRefreshTokenByHash(tokenHash);
   if (
     !current ||
@@ -213,7 +217,7 @@ async function exchangeRefreshToken(
     current.revokedAt ||
     isExpired(current.expiresAt)
   ) {
-    throw invalidGrant();
+    throw invalidAuthorizationGrant();
   }
   const [grant, user, resource] = await Promise.all([
     storage.getAuthorizationGrant(
@@ -222,7 +226,7 @@ async function exchangeRefreshToken(
       current.protectedResourceId
     ),
     ctx.storage.getUserById(current.userId),
-    loadTokenResource(ctx, current.protectedResourceId, requestedResource)
+    loadAuthorizationTokenResource(ctx, current.protectedResourceId, requestedResource)
   ]);
   if (
     !grant ||
@@ -232,7 +236,7 @@ async function exchangeRefreshToken(
     user.disabledAt ||
     !authorizationTokenScopesAreActive(resource, grant?.scopes ?? [], current.scopes)
   ) {
-    throw invalidGrant();
+    throw invalidAuthorizationGrant();
   }
   await verifyAndConsumeDpopProof(ctx, {
     proof: input.dpopProof,
@@ -243,7 +247,7 @@ async function exchangeRefreshToken(
     now: new Date()
   });
   const scopes = refreshScopes(input.scope, current.scopes);
-  const issued = createTokenPair(
+  const issued = createAuthorizationTokenPair(
     ctx,
     client,
     current.grantId,
@@ -285,9 +289,9 @@ async function exchangeRefreshToken(
         reason: "refresh_token_reuse"
       }
     });
-    throw invalidGrant();
+    throw invalidAuthorizationGrant();
   }
-  if (result !== "rotated") throw invalidGrant();
+  if (result !== "rotated") throw invalidAuthorizationGrant();
 
   await audit(ctx, {
     eventType: "authorization_server.token_refreshed",
@@ -301,91 +305,13 @@ async function exchangeRefreshToken(
       ...(resource ? { protectedResourceId: resource.id } : {})
     }
   });
-  return tokenResponse(
+  return authorizationTokenResponse(
     issued.access.raw,
     issued.access.entity.expiresAt,
     scopes,
     current.dpopJkt ?? null,
     issued.refresh.raw
   );
-}
-
-function createTokenPair(
-  ctx: AuthEngineContext,
-  client: AuthorizationClient,
-  grantId: string,
-  user: User,
-  protectedResourceId: string | null,
-  scopes: string[],
-  refreshGeneration: number,
-  dpopJkt: string | null,
-  forceRefresh = false
-): {
-  access: { raw: string; entity: AuthorizationAccessToken };
-  refresh: { raw: string; entity: AuthorizationRefreshToken } | null;
-} {
-  const { config } = requireAuthorizationServer(ctx);
-  const now = new Date();
-  const rawAccess = createAccessToken();
-  const access: AuthorizationAccessToken = {
-    id: createId("oat"),
-    tokenHash: hashAuthorizationSecret(ctx, rawAccess),
-    prefix: authorizationTokenPrefix(rawAccess),
-    grantId,
-    authorizationClientId: client.id,
-    userId: user.id,
-    protectedResourceId,
-    scopes: [...scopes],
-    dpopJkt,
-    expiresAt: new Date(now.getTime() + config.accessTokenTtlMs),
-    revokedAt: null,
-    createdAt: now
-  };
-  if (!forceRefresh && !scopes.includes("offline_access")) {
-    return { access: { raw: rawAccess, entity: access }, refresh: null };
-  }
-  const rawRefresh = createRefreshToken();
-  return {
-    access: { raw: rawAccess, entity: access },
-    refresh: {
-      raw: rawRefresh,
-      entity: {
-        id: createId("ort"),
-        tokenHash: hashAuthorizationSecret(ctx, rawRefresh),
-        prefix: authorizationTokenPrefix(rawRefresh),
-        grantId,
-        authorizationClientId: client.id,
-        userId: user.id,
-        protectedResourceId,
-        scopes: [...scopes],
-        generation: refreshGeneration,
-        replacedByTokenId: null,
-        dpopJkt,
-        expiresAt: new Date(now.getTime() + config.refreshTokenTtlMs),
-        consumedAt: null,
-        revokedAt: null,
-        createdAt: now
-      }
-    }
-  };
-}
-
-function tokenResponse(
-  accessToken: string,
-  expiresAt: Date,
-  scopes: readonly string[],
-  dpopJkt: string | null,
-  refreshToken?: string,
-  idToken?: string
-): AuthorizationTokenResponse {
-  return {
-    token_type: dpopJkt ? "DPoP" : "Bearer",
-    access_token: accessToken,
-    expires_in: Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)),
-    scope: scopes.join(" "),
-    ...(refreshToken ? { refresh_token: refreshToken } : {}),
-    ...(idToken ? { id_token: idToken } : {})
-  };
 }
 
 function refreshScopes(value: string | undefined, current: string[]): string[] {
@@ -408,22 +334,15 @@ function refreshScopes(value: string | undefined, current: string[]): string[] {
   return scopes;
 }
 
-function usableSession(session: Session | null): session is Session {
-  return Boolean(
-    session &&
-    !session.revokedAt &&
-    !isExpired(session.expiresAt) &&
-    !isExpired(session.idleExpiresAt)
-  );
-}
-
 function requiredToken(
   value: string | undefined,
   field: string,
   prefix: string
 ): string {
   const token = requiredText(value, field);
-  if (!token.startsWith(prefix) || token.length > 512) throw invalidGrant();
+  if (!token.startsWith(prefix) || token.length > 512) {
+    throw invalidAuthorizationGrant();
+  }
   return token;
 }
 
@@ -434,46 +353,14 @@ function requiredText(value: string | undefined, field: string): string {
   return value;
 }
 
-function invalidGrant(): AuthorizationProtocolError {
-  return new AuthorizationProtocolError(
-    "invalid_grant",
-    "The authorization grant is invalid, expired, revoked, or already used"
-  );
-}
-
-function optionalResource(value: string | undefined): string | null {
-  if (value === undefined) return null;
-  try {
-    return normalizeProtectedResourceIdentifier(value);
-  } catch {
+function assertClientGrantType(
+  client: AuthorizationClient,
+  grantType: AuthorizationClient["grantTypes"][number]
+): void {
+  if (!client.grantTypes.includes(grantType)) {
     throw new AuthorizationProtocolError(
-      "invalid_target",
-      "resource must identify a registered protected resource"
+      "unauthorized_client",
+      "The authorization client cannot use this grant type"
     );
   }
-}
-
-async function loadTokenResource(
-  ctx: AuthEngineContext,
-  protectedResourceId: string | null,
-  requestedIdentifier: string | null
-): Promise<ProtectedResource | null> {
-  if (protectedResourceId === null) {
-    if (requestedIdentifier !== null) throw invalidTarget();
-    return null;
-  }
-  const resource = await requireAuthorizationServer(ctx).storage
-    .getProtectedResourceById(protectedResourceId);
-  if (!isActiveProtectedResource(resource)) throw invalidGrant();
-  if (requestedIdentifier !== null && requestedIdentifier !== resource.identifier) {
-    throw invalidTarget();
-  }
-  return resource;
-}
-
-function invalidTarget(): AuthorizationProtocolError {
-  return new AuthorizationProtocolError(
-    "invalid_target",
-    "The protected resource does not match the authorization grant"
-  );
 }

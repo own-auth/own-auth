@@ -23,6 +23,7 @@ export const authorizationPrompts = [
 
 export const authorizationServerPaths = Object.freeze({
   authorization: "/oauth/authorize",
+  deviceAuthorization: "/oauth/device/authorize",
   token: "/oauth/token",
   revocation: "/oauth/revoke",
   introspection: "/oauth/introspect",
@@ -37,12 +38,15 @@ export const authorizationServerTokenPrefixes = Object.freeze({
   interaction: "oa_ix_",
   authorizationCode: "oa_ac_",
   accessToken: "oa_at_",
-  refreshToken: "oa_rt_"
+  refreshToken: "oa_rt_",
+  deviceCode: "oa_dc_"
 });
 
 export const authorizationServerRateLimits = Object.freeze({
   start: 60,
   interaction: 30,
-  protocol: 120
+  protocol: 120,
+  deviceStart: 20,
+  deviceLookup: 5
 });
 export const authorizationServerRateLimitWindowMs = 10 * 60 * 1000;

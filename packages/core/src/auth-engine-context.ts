@@ -54,6 +54,10 @@ import {
   type ScimStorage
 } from "./scim-storage.js";
 import type { ScimRuntimeConfig } from "./scim-types.js";
+import {
+  isDeviceAuthorizationCapableStorage,
+  type DeviceAuthorizationStorage
+} from "./authorization-server-device-storage.js";
 
 export interface AuthEngineContext {
   storage: AuthStorage;
@@ -87,6 +91,7 @@ export interface AuthEngineContext {
   authorizationServer: AuthorizationServerRuntimeConfig | null;
   authorizationServerStorage: AuthorizationServerStorage | null;
   dpopStorage: DpopStorage | null;
+  deviceAuthorizationStorage: DeviceAuthorizationStorage | null;
   saml: SamlProvider | null;
   samlStorage: SamlStorage | null;
   scim: ScimRuntimeConfig | null;
@@ -150,6 +155,18 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
       "implement dpopStorage."
     );
   }
+  const deviceAuthorizationStorage =
+    authorizationServer?.deviceAuthorization && authorizationServerStorage &&
+      isDeviceAuthorizationCapableStorage(authorizationServerStorage)
+      ? authorizationServerStorage.deviceAuthorizationStorage
+      : null;
+  if (authorizationServer?.deviceAuthorization && !deviceAuthorizationStorage) {
+    throw new Error(
+      "Device authorization requires authorization-server storage that supports " +
+      "DeviceAuthorizationStorage. The configured adapter does not implement " +
+      "deviceAuthorizationStorage."
+    );
+  }
   if (authorizationServer && !encryption) {
     throw new Error("OAuth/OIDC authorization-server support requires encryption configuration");
   }
@@ -206,6 +223,7 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     authorizationServer,
     authorizationServerStorage,
     dpopStorage,
+    deviceAuthorizationStorage,
     saml,
     samlStorage,
     scim,

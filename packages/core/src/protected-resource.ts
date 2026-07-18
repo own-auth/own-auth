@@ -1,3 +1,4 @@
+import { encodeOAuthBasicCredentials } from "./encoding.js";
 import { normalizeProtectedResourceUrl } from "./protected-resource-url.js";
 import {
   canonicalizeDpopUrl,
@@ -161,7 +162,7 @@ export function createOwnAuthProtectedResource(
         method: "POST",
         headers: {
           accept: "application/json",
-          authorization: basicCredentials(resource, resourceSecret),
+          authorization: encodeOAuthBasicCredentials(resource, resourceSecret),
           "content-type": "application/x-www-form-urlencoded"
         },
         body: form.toString()
@@ -401,10 +402,6 @@ function normalizeScopes(values: readonly string[]): string[] {
     throw configurationError("requiredScopes contains an invalid or duplicate scope");
   }
   return scopes;
-}
-
-function basicCredentials(identifier: string, secret: string): string {
-  return `Basic ${btoa(`${encodeURIComponent(identifier)}:${encodeURIComponent(secret)}`)}`;
 }
 
 function quote(value: string): string {

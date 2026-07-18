@@ -36,6 +36,8 @@ export type AuthErrorCode =
   | "authorization_client_not_found"
   | "authorization_client_revoked"
   | "authorization_interaction_invalid"
+  | "device_authorization_invalid"
+  | "device_authorization_already_decided"
   | "protected_resource_not_found"
   | "protected_resource_revoked"
   | "protected_resource_identifier_unavailable"

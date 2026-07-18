@@ -19,23 +19,45 @@ export type {
 } from "./authorization-server-protocol-error.js";
 export {
   isAuthorizationServerCapableStorage,
+  isDeviceAuthorizationCapableStorage,
   isDpopCapableAuthorizationServerStorage
 } from "./authorization-server-storage.js";
 export type {
+  ApproveDeviceAuthorizationStorageInput,
   AuthorizationCodeDpopBinding,
   AuthorizationServerCapableStorage,
   AuthorizationServerStorage,
   ConsumeDpopProofInput,
+  DenyDeviceAuthorizationStorageInput,
+  DeviceAuthorizationCapableAuthorizationServerStorage,
+  DeviceAuthorizationStorage,
   DpopCapableAuthorizationServerStorage,
   DpopStorage,
   FindAuthorizationCodeDpopBindingInput,
+  PollDeviceAuthorizationInput,
   RotateAuthorizationRefreshTokenInput,
   RotateAuthorizationRefreshTokenResult
 } from "./authorization-server-storage.js";
+export { deviceAuthorizationGrantType } from "./authorization-server-device-types.js";
+export type {
+  CleanupDeviceAuthorizationsInput,
+  CompleteDeviceAuthorizationInput,
+  ConsumeDeviceAuthorizationInput,
+  DenyDeviceAuthorizationInput,
+  DeviceAuthorization,
+  DeviceAuthorizationDecisionResult,
+  DeviceAuthorizationPollResult,
+  DeviceAuthorizationRequestInput,
+  DeviceAuthorizationResponse,
+  DeviceAuthorizationStatus,
+  GetDeviceAuthorizationInput,
+  PublicDeviceAuthorization
+} from "./authorization-server-device-types.js";
 export type {
   AuthorizationAccessToken,
   AuthorizationApplicationType,
   AuthorizationClient,
+  AuthorizationClientGrantType,
   AuthorizationClientSecret,
   AuthorizationClientStatus,
   AuthorizationClientType,

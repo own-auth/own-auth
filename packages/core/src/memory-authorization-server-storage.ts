@@ -25,6 +25,7 @@ import {
   updateStoredWhere
 } from "./memory-storage-helpers.js";
 import { MemoryProtectedResourceStorage } from "./memory-protected-resource-storage.js";
+import { MemoryDeviceAuthorizationStorage } from "./memory-device-authorization-storage.js";
 
 export class MemoryAuthorizationServerStorage
   extends MemoryProtectedResourceStorage
@@ -39,7 +40,11 @@ export class MemoryAuthorizationServerStorage
   private readonly refreshTokens = new Map<string, AuthorizationRefreshToken>();
   private readonly subjects = new Map<string, OidcSubject>();
   private readonly dpopProofs = new Map<string, Date>();
-
+  readonly deviceAuthorizationStorage = new MemoryDeviceAuthorizationStorage({
+    grants: this.grants,
+    accessTokens: this.accessTokens,
+    refreshTokens: this.refreshTokens
+  });
   async createAuthorizationClient(
     client: AuthorizationClient,
     secret: AuthorizationClientSecret | null
@@ -51,7 +56,6 @@ export class MemoryAuthorizationServerStorage
     if (secret) this.secrets.set(secret.id, cloneStored(secret));
     return cloneStored(client);
   }
-
   async getAuthorizationClientByClientId(
     clientId: string
   ): Promise<AuthorizationClient | null> {

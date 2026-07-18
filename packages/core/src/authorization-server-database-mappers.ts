@@ -2,6 +2,7 @@ import type {
   AuthorizationAccessToken,
   AuthorizationApplicationType,
   AuthorizationClient,
+  AuthorizationClientGrantType,
   AuthorizationClientSecret,
   AuthorizationClientStatus,
   AuthorizationClientType,
@@ -16,6 +17,10 @@ import type {
   ProtectedResourceStatus,
   TokenEndpointAuthMethod
 } from "./authorization-server-types.js";
+import type {
+  DeviceAuthorization,
+  DeviceAuthorizationStatus
+} from "./authorization-server-device-types.js";
 import type { AuthorizationCodeDpopBinding } from "./authorization-server-storage.js";
 import {
   booleanValue,
@@ -40,6 +45,7 @@ export function mapAuthorizationClient(row: DatabaseRow): AuthorizationClient {
     ) as TokenEndpointAuthMethod,
     redirectUris: stringArray(row.redirect_uris),
     allowedScopes: stringArray(row.allowed_scopes),
+    grantTypes: stringArray(row.grant_types) as AuthorizationClientGrantType[],
     dpopBoundAccessTokens: booleanValue(row.dpop_bound_access_tokens),
     status: stringValue(row.status) as AuthorizationClientStatus,
     createdAt: dateValue(row.created_at),
@@ -198,6 +204,32 @@ export function mapOidcSubject(row: DatabaseRow): OidcSubject {
     id: stringValue(row.id),
     userId: stringValue(row.user_id),
     subject: stringValue(row.subject),
+    createdAt: dateValue(row.created_at)
+  };
+}
+
+export function mapDeviceAuthorization(row: DatabaseRow): DeviceAuthorization {
+  return {
+    id: stringValue(row.id),
+    deviceCodeHash: stringValue(row.device_code_hash),
+    userCodeHash: stringValue(row.user_code_hash),
+    authorizationClientId: stringValue(row.authorization_client_id),
+    protectedResourceId: nullableString(row.protected_resource_id),
+    requestCiphertext: stringValue(row.request_ciphertext),
+    requestNonce: stringValue(row.request_nonce),
+    encryptionKeyId: stringValue(row.encryption_key_id),
+    dpopJkt: nullableString(row.dpop_jkt),
+    status: stringValue(row.status) as DeviceAuthorizationStatus,
+    userId: nullableString(row.user_id),
+    sessionId: nullableString(row.session_id),
+    grantId: nullableString(row.grant_id),
+    approvedScopes: stringArray(row.approved_scopes),
+    pollingIntervalSeconds: numberValue(row.polling_interval_seconds),
+    nextPollAt: dateValue(row.next_poll_at),
+    expiresAt: dateValue(row.expires_at),
+    approvedAt: nullableDate(row.approved_at),
+    deniedAt: nullableDate(row.denied_at),
+    consumedAt: nullableDate(row.consumed_at),
     createdAt: dateValue(row.created_at)
   };
 }

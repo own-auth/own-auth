@@ -38,11 +38,13 @@ import {
 } from "./postgres-authorization-refresh.js";
 import { expectOne } from "./postgres-row.js";
 import type { Row } from "./postgres-types.js";
+import { PostgresDeviceAuthorizationStorage } from "./postgres-device-authorization-storage.js";
 
 export class PostgresAuthorizationServerStorage
   extends PostgresAuthorizationClientStorage
   implements AuthorizationServerStorage, DpopStorage {
   readonly dpopStorage = this;
+  readonly deviceAuthorizationStorage = new PostgresDeviceAuthorizationStorage(this.db);
   async createAuthorizationCode(code: AuthorizationCode): Promise<AuthorizationCode> {
     return mapAuthorizationCode(await this.insertOne(
       "own_auth_authorization_codes",

@@ -37,13 +37,16 @@ import { expectDatabaseValue } from "../database-row.js";
 import type { DatabaseRow } from "../database-types.js";
 import { D1AuthorizationClientStorage } from "./d1-authorization-client-storage.js";
 import type { D1DatabaseLike } from "./d1-types.js";
+import { D1DeviceAuthorizationStorage } from "./d1-device-authorization-storage.js";
 
 export class D1AuthorizationServerStorage
   extends D1AuthorizationClientStorage
   implements AuthorizationServerStorage, DpopStorage {
   readonly dpopStorage = this;
+  readonly deviceAuthorizationStorage: D1DeviceAuthorizationStorage;
   constructor(db: D1DatabaseLike) {
     super(db);
+    this.deviceAuthorizationStorage = new D1DeviceAuthorizationStorage(db);
   }
 
   async createAuthorizationCode(code: AuthorizationCode): Promise<AuthorizationCode> {

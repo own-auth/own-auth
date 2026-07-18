@@ -218,6 +218,13 @@
           "source": "docs/authorization-server.md"
         },
         {
+          "title": "Device Authorization",
+          "description": "Authorize command-line tools and input-limited devices through a short user code, an application-owned verification page, and RFC 8628 polling.",
+          "href": "/docs/device-authorization",
+          "slug": ["device-authorization"],
+          "source": "docs/device-authorization.md"
+        },
+        {
           "title": "Protected Resources",
           "description": "Bind OAuth access tokens to one API and optionally one client key, then verify Bearer or DPoP requests through authenticated introspection.",
           "href": "/docs/protected-resources",

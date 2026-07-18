@@ -22,3 +22,10 @@ export function decodeBase64Url(value: string): Uint8Array {
 export function encodeHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+export function encodeOAuthBasicCredentials(
+  identifier: string,
+  secret: string
+): string {
+  return `Basic ${btoa(`${encodeURIComponent(identifier)}:${encodeURIComponent(secret)}`)}`;
+}

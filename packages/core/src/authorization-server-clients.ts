@@ -8,6 +8,7 @@ import {
   extractClientSecretPrefix,
   hashAuthorizationSecret,
   normalizeAllowedScopes,
+  normalizeClientGrantTypes,
   normalizeClientRedirectUris,
   requireAuthorizationServer
 } from "./authorization-server-helpers.js";
@@ -35,9 +36,11 @@ export async function createAuthorizationClient(
   const { config, storage } = requireAuthorizationServer(ctx);
   assertClientKinds(input.clientType, input.applicationType);
   const name = clientName(input.name);
+  const grantTypes = normalizeClientGrantTypes(input.grantTypes);
   const redirectUris = normalizeClientRedirectUris(
     input.applicationType,
-    input.redirectUris
+    input.redirectUris ?? [],
+    grantTypes
   );
   const allowedScopes = normalizeAllowedScopes(config, input.allowedScopes);
   const tokenEndpointAuthMethod = clientAuthenticationMethod(
@@ -60,6 +63,7 @@ export async function createAuthorizationClient(
     tokenEndpointAuthMethod,
     redirectUris,
     allowedScopes,
+    grantTypes,
     dpopBoundAccessTokens,
     status: "active",
     createdAt: now,
@@ -103,6 +107,14 @@ export async function updateAuthorizationClient(
 ): Promise<AuthorizationClient> {
   const { config, storage } = requireAuthorizationServer(ctx);
   const current = await requireManagedClient(ctx, input.clientId);
+  const grantTypes = input.grantTypes === undefined
+    ? current.grantTypes
+    : normalizeClientGrantTypes(input.grantTypes);
+  const redirectUris = normalizeClientRedirectUris(
+    current.applicationType,
+    input.redirectUris ?? current.redirectUris,
+    grantTypes
+  );
   requireDpopConfiguration(
     ctx,
     input.dpopBoundAccessTokens ?? false,
@@ -110,17 +122,13 @@ export async function updateAuthorizationClient(
   );
   const updated = await storage.updateAuthorizationClient(current.id, {
     ...(input.name === undefined ? {} : { name: clientName(input.name) }),
-    ...(input.redirectUris === undefined
-      ? {}
-      : {
-          redirectUris: normalizeClientRedirectUris(
-            current.applicationType,
-            input.redirectUris
-          )
-        }),
+    ...(input.redirectUris !== undefined || input.grantTypes !== undefined
+      ? { redirectUris }
+      : {}),
     ...(input.allowedScopes === undefined
       ? {}
       : { allowedScopes: normalizeAllowedScopes(config, input.allowedScopes) }),
+    ...(input.grantTypes === undefined ? {} : { grantTypes }),
     ...(input.dpopBoundAccessTokens === undefined
       ? {}
       : { dpopBoundAccessTokens: input.dpopBoundAccessTokens }),

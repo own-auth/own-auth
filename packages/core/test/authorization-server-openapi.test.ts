@@ -33,5 +33,26 @@ describe("authorization-server OpenAPI", () => {
         cnf: { properties: { jkt: { type: "string" } } }
       }
     });
+    expect(document.paths["/oauth/device/authorize"]?.post).toMatchObject({
+      operationId: "startDeviceAuthorization"
+    });
+    expect(schemas.DeviceAuthorizationResponse).toMatchObject({
+      required: expect.arrayContaining([
+        "device_code",
+        "user_code",
+        "verification_uri",
+        "expires_in",
+        "interval"
+      ])
+    });
+  });
+
+  it("can omit the optional device authorization contract", () => {
+    const document = createOwnAuthAuthorizationServerOpenApiDocument({
+      serverUrl: "https://auth.example.com",
+      includeDeviceAuthorization: false
+    });
+
+    expect(document.paths).not.toHaveProperty("/oauth/device/authorize");
   });
 });

@@ -14,6 +14,13 @@ import {
 import { startAuthorization } from "./authorization-server-authorization-request.js";
 import { cleanupDpopProofs } from "./authorization-server-dpop.js";
 import {
+  approveDeviceAuthorization,
+  cleanupDeviceAuthorizations,
+  denyDeviceAuthorization,
+  getDeviceAuthorization,
+  startDeviceAuthorization
+} from "./authorization-server-device.js";
+import {
   getAuthorizationServerJwks,
   getAuthorizationServerMetadata
 } from "./authorization-server-metadata.js";
@@ -67,6 +74,15 @@ import type {
   VerifyAuthorizationAccessTokenInput
 } from "./authorization-server-types.js";
 import type { AuthOperationRunner } from "./auth-operation-runner.js";
+import type {
+  CleanupDeviceAuthorizationsInput,
+  CompleteDeviceAuthorizationInput,
+  DenyDeviceAuthorizationInput,
+  DeviceAuthorizationRequestInput,
+  DeviceAuthorizationResponse,
+  GetDeviceAuthorizationInput,
+  PublicDeviceAuthorization
+} from "./authorization-server-device-types.js";
 
 export class OwnAuthAuthorizationServer {
   constructor(
@@ -77,6 +93,14 @@ export class OwnAuthAuthorizationServer {
   /** @internal Used by createOwnAuthAuthorizationServerHandler. */
   isConfigured(): boolean {
     return Boolean(this.ctx.authorizationServer && this.ctx.authorizationServerStorage);
+  }
+
+  /** @internal Used by createOwnAuthAuthorizationServerHandler. */
+  isDeviceAuthorizationConfigured(): boolean {
+    return Boolean(
+      this.ctx.authorizationServer?.deviceAuthorization &&
+      this.ctx.deviceAuthorizationStorage
+    );
   }
 
   createClient(
@@ -160,6 +184,30 @@ export class OwnAuthAuthorizationServer {
       denyAuthorizationInteraction(this.ctx, input));
   }
 
+  getDeviceAuthorization(
+    input: GetDeviceAuthorizationInput
+  ): Promise<PublicDeviceAuthorization> {
+    return this.execute("authorizationServer.getDeviceAuthorization", input, () =>
+      getDeviceAuthorization(this.ctx, input));
+  }
+
+  approveDeviceAuthorization(input: CompleteDeviceAuthorizationInput): Promise<void> {
+    return this.execute("authorizationServer.approveDeviceAuthorization", input, () =>
+      approveDeviceAuthorization(this.ctx, input));
+  }
+
+  denyDeviceAuthorization(input: DenyDeviceAuthorizationInput): Promise<void> {
+    return this.execute("authorizationServer.denyDeviceAuthorization", input, () =>
+      denyDeviceAuthorization(this.ctx, input));
+  }
+
+  cleanupDeviceAuthorizations(
+    input: CleanupDeviceAuthorizationsInput
+  ): Promise<number> {
+    return this.execute("authorizationServer.cleanupDeviceAuthorizations", input, () =>
+      cleanupDeviceAuthorizations(this.ctx, input));
+  }
+
   verifyAccessToken(
     input: VerifyAuthorizationAccessTokenInput
   ): Promise<VerifiedAuthorizationAccessToken> {
@@ -183,6 +231,14 @@ export class OwnAuthAuthorizationServer {
   start(input: AuthorizationRequestInput): Promise<AuthorizationRedirectResult> {
     return this.execute("authorizationServer.start", input, () =>
       startAuthorization(this.ctx, input));
+  }
+
+  /** @internal Used by createOwnAuthAuthorizationServerHandler. */
+  startDeviceAuthorization(
+    input: DeviceAuthorizationRequestInput
+  ): Promise<DeviceAuthorizationResponse> {
+    return this.execute("authorizationServer.startDeviceAuthorization", input, () =>
+      startDeviceAuthorization(this.ctx, input));
   }
 
   /** @internal Used by createOwnAuthAuthorizationServerHandler. */

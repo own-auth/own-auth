@@ -10,6 +10,7 @@ import type {
   ProtectedResource,
   ProtectedResourceSecret
 } from "./authorization-server-types.js";
+import type { DeviceAuthorization } from "./authorization-server-device-types.js";
 import {
   databaseColumnList,
   type EntityColumnMap as ColumnMap
@@ -24,6 +25,7 @@ export const authorizationClientColumns: ColumnMap<AuthorizationClient> = {
   tokenEndpointAuthMethod: "token_endpoint_auth_method",
   redirectUris: "redirect_uris",
   allowedScopes: "allowed_scopes",
+  grantTypes: "grant_types",
   dpopBoundAccessTokens: "dpop_bound_access_tokens",
   status: "status",
   createdAt: "created_at",
@@ -148,6 +150,30 @@ export const oidcSubjectColumns: ColumnMap<OidcSubject> = {
   createdAt: "created_at"
 };
 
+export const deviceAuthorizationColumns: ColumnMap<DeviceAuthorization> = {
+  id: "id",
+  deviceCodeHash: "device_code_hash",
+  userCodeHash: "user_code_hash",
+  authorizationClientId: "authorization_client_id",
+  protectedResourceId: "protected_resource_id",
+  requestCiphertext: "request_ciphertext",
+  requestNonce: "request_nonce",
+  encryptionKeyId: "encryption_key_id",
+  dpopJkt: "dpop_jkt",
+  status: "status",
+  userId: "user_id",
+  sessionId: "session_id",
+  grantId: "grant_id",
+  approvedScopes: "approved_scopes",
+  pollingIntervalSeconds: "polling_interval_seconds",
+  nextPollAt: "next_poll_at",
+  expiresAt: "expires_at",
+  approvedAt: "approved_at",
+  deniedAt: "denied_at",
+  consumedAt: "consumed_at",
+  createdAt: "created_at"
+};
+
 export const authorizationClientReturning = databaseColumnList(authorizationClientColumns);
 export const authorizationClientSecretReturning =
   databaseColumnList(authorizationClientSecretColumns);
@@ -163,3 +189,5 @@ export const authorizationAccessTokenReturning =
 export const authorizationRefreshTokenReturning =
   databaseColumnList(authorizationRefreshTokenColumns);
 export const oidcSubjectReturning = databaseColumnList(oidcSubjectColumns);
+export const deviceAuthorizationReturning =
+  databaseColumnList(deviceAuthorizationColumns);

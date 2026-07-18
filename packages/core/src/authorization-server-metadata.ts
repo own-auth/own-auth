@@ -11,6 +11,7 @@ import {
 } from "./authorization-server-helpers.js";
 import type { AuthorizationMetadata } from "./authorization-server-types.js";
 import { dpopSigningAlgorithms } from "./dpop-crypto.js";
+import { deviceAuthorizationGrantType } from "./authorization-server-device-types.js";
 
 export async function getAuthorizationServerMetadata(
   ctx: AuthEngineContext
@@ -23,6 +24,14 @@ export async function getAuthorizationServerMetadata(
       authorizationServerPaths.authorization
     ),
     token_endpoint: authorizationServerUrl(config, authorizationServerPaths.token),
+    ...(config.deviceAuthorization
+      ? {
+          device_authorization_endpoint: authorizationServerUrl(
+            config,
+            authorizationServerPaths.deviceAuthorization
+          )
+        }
+      : {}),
     revocation_endpoint: authorizationServerUrl(
       config,
       authorizationServerPaths.revocation
@@ -38,7 +47,11 @@ export async function getAuthorizationServerMetadata(
     jwks_uri: authorizationServerUrl(config, authorizationServerPaths.jwks),
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
+    grant_types_supported: [
+      "authorization_code",
+      "refresh_token",
+      ...(config.deviceAuthorization ? [deviceAuthorizationGrantType] : [])
+    ],
     subject_types_supported: ["public"],
     id_token_signing_alg_values_supported: ["RS256"],
     token_endpoint_auth_methods_supported: [...authorizationClientAuthenticationMethods],

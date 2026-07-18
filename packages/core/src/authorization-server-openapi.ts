@@ -6,6 +6,7 @@ export interface OwnAuthAuthorizationServerOpenApiOptions {
   title?: string;
   version?: string;
   serverUrl?: string;
+  includeDeviceAuthorization?: boolean;
 }
 
 export interface OwnAuthAuthorizationServerOpenApiDocument {
@@ -19,6 +20,7 @@ export interface OwnAuthAuthorizationServerOpenApiDocument {
 export function createOwnAuthAuthorizationServerOpenApiDocument(
   options: OwnAuthAuthorizationServerOpenApiOptions = {}
 ): OwnAuthAuthorizationServerOpenApiDocument {
+  const includeDeviceAuthorization = options.includeDeviceAuthorization ?? true;
   const document: OwnAuthAuthorizationServerOpenApiDocument = {
     openapi: "3.1.0",
     info: {
@@ -35,10 +37,31 @@ export function createOwnAuthAuthorizationServerOpenApiDocument(
       [authorizationServerPaths.authorization]: {
         get: authorizationOperation()
       },
+      ...(includeDeviceAuthorization
+        ? {
+            [authorizationServerPaths.deviceAuthorization]: {
+              post: formOperation({
+                operationId: "startDeviceAuthorization",
+                summary: "Start an OAuth device authorization flow",
+                fields: {
+                  client_id: stringSchema(),
+                  client_secret: stringSchema(),
+                  scope: stringSchema(),
+                  resource: { type: "string", format: "uri" },
+                  dpop_jkt: {
+                    type: "string",
+                    pattern: dpopJwkThumbprintPattern
+                  }
+                },
+                response: { $ref: "#/components/schemas/DeviceAuthorizationResponse" }
+              })
+            }
+          }
+        : {}),
       [authorizationServerPaths.token]: {
         post: formOperation({
           operationId: "exchangeAuthorizationToken",
-          summary: "Exchange an authorization code or refresh token",
+          summary: "Exchange an authorization code, refresh token, or device code",
           fields: tokenFields(),
           requiredFields: ["grant_type"],
           dpopHeader: true,
@@ -99,6 +122,7 @@ export function createOwnAuthAuthorizationServerOpenApiDocument(
       schemas: {
         ProtocolError: protocolErrorSchema(),
         TokenResponse: tokenResponseSchema(),
+        DeviceAuthorizationResponse: deviceAuthorizationResponseSchema(),
         IntrospectionResponse: introspectionResponseSchema()
       }
     }
@@ -207,8 +231,31 @@ function tokenFields(): Record<string, Record<string, unknown>> {
     redirect_uri: { type: "string", format: "uri" },
     code_verifier: stringSchema(),
     refresh_token: stringSchema(),
+    device_code: stringSchema(),
     scope: stringSchema(),
     resource: { type: "string", format: "uri" }
+  };
+}
+
+function deviceAuthorizationResponseSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    required: [
+      "device_code",
+      "user_code",
+      "verification_uri",
+      "verification_uri_complete",
+      "expires_in",
+      "interval"
+    ],
+    properties: {
+      device_code: { type: "string" },
+      user_code: { type: "string", pattern: "^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$" },
+      verification_uri: { type: "string", format: "uri" },
+      verification_uri_complete: { type: "string", format: "uri" },
+      expires_in: { type: "integer", minimum: 0 },
+      interval: { type: "integer", minimum: 1 }
+    }
   };
 }
 

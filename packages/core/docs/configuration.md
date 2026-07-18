@@ -363,6 +363,11 @@ const auth = createOwnAuth({
       proofTtlMs: 5 * 60 * 1_000,
       clockSkewMs: 60 * 1_000,
     },
+    deviceAuthorization: {
+      verificationUrl: "https://auth.example.com/device",
+      ttlMs: 10 * 60 * 1_000,
+      pollingIntervalSeconds: 5,
+    },
   },
 });
 ```
@@ -373,8 +378,11 @@ const auth = createOwnAuth({
 | `failedIntrospectionAttemptsPerMinute` | `number` | `30` | Failed protected-resource authentication attempts allowed per IP address. |
 | `dpop.proofTtlMs` | `number` | `300000` | Maximum age of a DPoP proof before clock skew is applied. |
 | `dpop.clockSkewMs` | `number` | `60000` | Allowed client and server clock difference for DPoP proof timestamps. |
+| `deviceAuthorization.verificationUrl` | `string` | - | Application page where users enter and approve a device code. |
+| `deviceAuthorization.ttlMs` | `number` | `600000` | Device and user code lifetime. |
+| `deviceAuthorization.pollingIntervalSeconds` | `number` | `5` | Initial minimum token polling interval in seconds. |
 
-The current authorization-server schema requires migrations `011_authorization_server`, `012_protected_resources`, and `013_dpop`, plus the shared encryption key ring. DPoP remains optional: omit `dpop` for a Bearer-only server. See [OAuth And OpenID Connect Authorization Server](/docs/authorization-server) for the provider flow and [Protected Resources](/docs/protected-resources) for resource registration and remote token verification.
+The authorization-server schema starts with migrations `011_authorization_server`, `012_protected_resources`, and `013_dpop`. Device authorization additionally uses `016_device_authorization`. The shared encryption key ring protects stored protocol requests. DPoP and device authorization remain optional. See [OAuth And OpenID Connect Authorization Server](/docs/authorization-server), [Device Authorization](/docs/device-authorization), and [Protected Resources](/docs/protected-resources).
 
 ### Encryption
 

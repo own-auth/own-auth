@@ -36,6 +36,7 @@ export async function assertAuthorizationRefreshRace(
     tokenEndpointAuthMethod: "none",
     redirectUris: ["https://client.example.com/callback"],
     allowedScopes: ["openid", "offline_access"],
+    grantTypes: ["authorization_code", "refresh_token"],
     dpopBoundAccessTokens: false,
     status: "active",
     createdAt: now,

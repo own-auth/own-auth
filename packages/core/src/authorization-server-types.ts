@@ -2,6 +2,10 @@ import type { JsonRecord, RequestContext, SessionAssuranceLevel } from "./types.
 
 export type AuthorizationClientType = "public" | "confidential";
 export type AuthorizationApplicationType = "web" | "native";
+export type AuthorizationClientGrantType =
+  | "authorization_code"
+  | "refresh_token"
+  | "urn:ietf:params:oauth:grant-type:device_code";
 export type AuthorizationClientStatus = "active" | "revoked";
 export type ProtectedResourceStatus = "active" | "revoked";
 export type TokenEndpointAuthMethod =
@@ -49,6 +53,11 @@ export interface AuthorizationServerOptions {
     proofTtlMs?: number;
     clockSkewMs?: number;
   };
+  deviceAuthorization?: {
+    verificationUrl: string;
+    ttlMs?: number;
+    pollingIntervalSeconds?: number;
+  };
 }
 
 export interface AuthorizationClient {
@@ -60,6 +69,7 @@ export interface AuthorizationClient {
   tokenEndpointAuthMethod: TokenEndpointAuthMethod;
   redirectUris: string[];
   allowedScopes: string[];
+  grantTypes: AuthorizationClientGrantType[];
   dpopBoundAccessTokens?: boolean;
   status: AuthorizationClientStatus;
   createdAt: Date;
@@ -205,8 +215,9 @@ export interface CreateAuthorizationClientInput {
   name: string;
   clientType: AuthorizationClientType;
   applicationType: AuthorizationApplicationType;
-  redirectUris: string[];
+  redirectUris?: string[];
   allowedScopes?: string[];
+  grantTypes?: AuthorizationClientGrantType[];
   tokenEndpointAuthMethod?: TokenEndpointAuthMethod;
   dpopBoundAccessTokens?: boolean;
   actorUserId?: string;
@@ -259,6 +270,7 @@ export interface UpdateAuthorizationClientInput {
   name?: string;
   redirectUris?: string[];
   allowedScopes?: string[];
+  grantTypes?: AuthorizationClientGrantType[];
   dpopBoundAccessTokens?: boolean;
   actorUserId?: string;
   request?: RequestContext;
@@ -388,6 +400,7 @@ export interface AuthorizationTokenRequestInput {
   redirectUri?: string;
   codeVerifier?: string;
   refreshToken?: string;
+  deviceCode?: string;
   scope?: string;
   resource?: string;
   dpopProof?: string;

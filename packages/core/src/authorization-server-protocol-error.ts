@@ -1,6 +1,7 @@
 export type AuthorizationProtocolErrorCode =
   | "access_denied"
   | "consent_required"
+  | "authorization_pending"
   | "invalid_client"
   | "invalid_dpop_proof"
   | "invalid_grant"
@@ -9,8 +10,10 @@ export type AuthorizationProtocolErrorCode =
   | "invalid_target"
   | "invalid_token"
   | "interaction_required"
+  | "expired_token"
   | "login_required"
   | "server_error"
+  | "slow_down"
   | "temporarily_unavailable"
   | "unauthorized_client"
   | "unsupported_grant_type"

@@ -63,6 +63,12 @@ export function createOwnAuthAuthorizationServerHandler(
     }
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
+    if (
+      path === authorizationServerPaths.deviceAuthorization &&
+      !auth.authorizationServer.isDeviceAuthorizationConfigured()
+    ) {
+      return protocolJson({ error: "not_found" }, 404);
+    }
     const route = protocolRoute(path);
     return traceHttpEndpoint({
       endpointId: `authorizationServer.${route.id}`,
@@ -98,6 +104,7 @@ export function createOwnAuthAuthorizationServerHandler(
             redirectUri: singleAuthorizationParameter(form, "redirect_uri"),
             codeVerifier: singleAuthorizationParameter(form, "code_verifier"),
             refreshToken: singleAuthorizationParameter(form, "refresh_token"),
+            deviceCode: singleAuthorizationParameter(form, "device_code"),
             scope: singleAuthorizationParameter(form, "scope"),
             resource: singleAuthorizationParameter(form, "resource"),
             dpopProof: readDpopProofHeader(request),
@@ -106,6 +113,19 @@ export function createOwnAuthAuthorizationServerHandler(
             request: await requestContext(request, options)
           };
           return protocolJson(await auth.authorizationServer.exchangeToken(input));
+        }
+        if (
+          path === authorizationServerPaths.deviceAuthorization &&
+          request.method === "POST"
+        ) {
+          const form = await readAuthorizationForm(request, maximumBodyBytes);
+          return protocolJson(await auth.authorizationServer.startDeviceAuthorization({
+            ...readAuthorizationClientCredentials(request, form),
+            scope: singleAuthorizationParameter(form, "scope"),
+            resource: singleAuthorizationParameter(form, "resource"),
+            dpopJkt: singleAuthorizationParameter(form, "dpop_jkt"),
+            request: await requestContext(request, options)
+          }));
         }
         if (
           path === authorizationServerPaths.revocation &&

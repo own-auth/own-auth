@@ -7,6 +7,7 @@ import {
 import { createSaml } from "../../dist/saml.js";
 import type {
   AuthorizationServerStorage,
+  DeviceAuthorizationStorage,
   DpopStorage
 } from "../../dist/index.js";
 import {
@@ -51,6 +52,7 @@ const storageMethods = new Set([
   "createOAuthTransaction",
   "createOrganisation",
   "createPasskeyCredential",
+  "createSession",
   "createSmsOtp",
   "createToken",
   "createTotpFactor",
@@ -88,6 +90,13 @@ const authorizationStorageMethods = new Set([
   "upsertAuthorizationGrant"
 ]);
 
+const deviceAuthorizationStorageMethods = new Set([
+  "approveDeviceAuthorization",
+  "consumeDeviceAuthorization",
+  "createDeviceAuthorization",
+  "denyDeviceAuthorization"
+]);
+
 const samlStorageMethods = new Set([
   "consumeResponse",
   "createConnection",
@@ -122,6 +131,20 @@ export async function handleAuthorizationStorageRpc(
     storage as AuthorizationServerStorage & DpopStorage,
     rpc,
     authorizationStorageMethods
+  );
+}
+
+export async function handleDeviceAuthorizationStorageRpc(
+  request: Request,
+  database: D1DatabaseLike
+): Promise<Response> {
+  const rpc = await readConformanceRpc(request);
+  const storage = createD1Persistence(database).storage.authorizationServerStorage
+    .deviceAuthorizationStorage;
+  return invokeConformanceRpc(
+    storage as DeviceAuthorizationStorage,
+    rpc,
+    deviceAuthorizationStorageMethods
   );
 }
 

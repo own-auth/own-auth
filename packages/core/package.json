@@ -19,6 +19,8 @@
     "authentication",
     "cloudflare",
     "d1",
+    "device-flow",
+    "oauth",
     "postgres",
     "sessions",
     "api-keys",
@@ -84,6 +86,10 @@
       "types": "./dist/scim-http.d.ts",
       "default": "./dist/scim-http.js"
     },
+    "./device-authorization": {
+      "types": "./dist/device-authorization.d.ts",
+      "default": "./dist/device-authorization.js"
+    },
     "./react": {
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
@@ -115,19 +121,21 @@
     "./migrations/013_dpop.sql": "./migrations/013_dpop.sql",
     "./migrations/014_saml.sql": "./migrations/014_saml.sql",
     "./migrations/015_scim.sql": "./migrations/015_scim.sql",
+    "./migrations/016_device_authorization.sql": "./migrations/016_device_authorization.sql",
     "./migrations/d1/*.sql": "./migrations/d1/*.sql",
     "./docs/installation.md": "./docs/installation.md",
     "./docs/cloudflare-d1.md": "./docs/cloudflare-d1.md",
     "./docs/saml.md": "./docs/saml.md",
     "./docs/scim.md": "./docs/scim.md",
+    "./docs/device-authorization.md": "./docs/device-authorization.md",
     "./docs/security-model.md": "./docs/security-model.md"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "pack:check": "npm pack --dry-run",
     "test": "vitest run",
-    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-migrations.integration.test.ts",
-    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-migrations.integration.test.ts",
+    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts",
+    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/types/tsconfig.json"
   },
   "dependencies": {

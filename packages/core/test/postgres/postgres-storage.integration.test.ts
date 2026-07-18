@@ -130,6 +130,7 @@ describeWithDatabase("PostgresAuthStorage integration", () => {
       tokenEndpointAuthMethod: "none",
       redirectUris: ["https://client.example.com/callback"],
       allowedScopes: ["documents:read", "documents:write", "offline_access"],
+      grantTypes: ["authorization_code", "refresh_token"],
       dpopBoundAccessTokens: false,
       status: "active",
       createdAt: now,

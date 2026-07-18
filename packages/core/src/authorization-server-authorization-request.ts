@@ -47,6 +47,12 @@ export async function startAuthorization(
     ctx,
     requiredText(input.clientId, "client_id")
   );
+  if (!client.grantTypes.includes("authorization_code")) {
+    throw new AuthorizationProtocolError(
+      "unauthorized_client",
+      "The authorization client cannot use the authorization code flow"
+    );
+  }
   const redirectUri = requireRegisteredRedirect(client, input.redirectUri);
   const state = optionalText(input.state, "state", 2_048);
   const resource = await resolveRequestedResource(ctx, input.resource, redirectUri, state);
@@ -175,6 +181,14 @@ function buildStoredAuthorizationRequest(
     throw redirectError(
       "invalid_scope",
       "Requested scope is not allowed for the protected resource",
+      redirectUri,
+      state
+    );
+  }
+  if (scopes.includes("offline_access") && !client.grantTypes.includes("refresh_token")) {
+    throw redirectError(
+      "invalid_scope",
+      "offline_access requires the refresh_token grant",
       redirectUri,
       state
     );

@@ -49,6 +49,11 @@ export interface AuthorizationServerRuntimeConfig {
     proofTtlMs: number;
     clockSkewMs: number;
   }> | null;
+  deviceAuthorization: Readonly<{
+    verificationUrl: string;
+    ttlMs: number;
+    pollingIntervalSeconds: number;
+  }> | null;
   signer: AuthorizationServerSigner;
 }
 
@@ -58,7 +63,11 @@ export function normalizeAuthorizationServerOptions(
   if (!options) return null;
 
   const issuer = normalizeIssuer(options.issuer);
-  const interactionUrl = normalizeInteractionUrl(options.interactionUrl, issuer);
+  const interactionUrl = normalizeAuthorizationPageUrl(
+    options.interactionUrl,
+    issuer,
+    "authorizationServer.interactionUrl"
+  );
   const scopes = normalizeScopes(options.scopes);
   return Object.freeze({
     issuer,
@@ -97,6 +106,23 @@ export function normalizeAuthorizationServerOptions(
           clockSkewMs: nonNegativeInteger(
             options.dpop.clockSkewMs ?? minute,
             "authorizationServer.dpop.clockSkewMs"
+          )
+        })
+      : null,
+    deviceAuthorization: options.deviceAuthorization
+      ? Object.freeze({
+          verificationUrl: normalizeAuthorizationPageUrl(
+            options.deviceAuthorization.verificationUrl,
+            issuer,
+            "authorizationServer.deviceAuthorization.verificationUrl"
+          ),
+          ttlMs: positiveInteger(
+            options.deviceAuthorization.ttlMs ?? 10 * minute,
+            "authorizationServer.deviceAuthorization.ttlMs"
+          ),
+          pollingIntervalSeconds: positiveInteger(
+            options.deviceAuthorization.pollingIntervalSeconds ?? 5,
+            "authorizationServer.deviceAuthorization.pollingIntervalSeconds"
           )
         })
       : null,
@@ -145,12 +171,16 @@ function normalizeIssuer(value: string): string {
   return parsed.origin;
 }
 
-function normalizeInteractionUrl(value: string, issuer: string): string {
+function normalizeAuthorizationPageUrl(
+  value: string,
+  issuer: string,
+  field: string
+): string {
   let parsed: URL;
   try {
     parsed = new URL(value, issuer);
   } catch {
-    throw new Error("authorizationServer.interactionUrl must be a valid URL");
+    throw new Error(`${field} must be a valid URL`);
   }
   if (
     parsed.username ||
@@ -163,9 +193,7 @@ function normalizeInteractionUrl(value: string, issuer: string): string {
         isLocalHostname(parsed.hostname)
       ))
   ) {
-    throw new Error(
-      "authorizationServer.interactionUrl must use HTTPS or a local development URL"
-    );
+    throw new Error(`${field} must use HTTPS or a local development URL`);
   }
   return parsed.toString();
 }

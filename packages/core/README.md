@@ -215,6 +215,8 @@ You have basic email/password auth. Here is where to go next:
 
 **OAuth**: Add Google, GitHub, or Apple through [OAuth and external providers](https://own-auth.com/docs/external-providers).
 
+**OAuth server**: Let other applications authorize users through the [OAuth and OpenID Connect server](https://own-auth.com/docs/authorization-server), including [device authorization](https://own-auth.com/docs/device-authorization) for command-line tools and input-limited devices.
+
 **Enterprise SSO**: Connect an organisation identity provider through [SAML SSO](https://own-auth.com/docs/saml).
 
 **Enterprise provisioning**: Provision organisation users and memberships through [SCIM](https://own-auth.com/docs/scim).

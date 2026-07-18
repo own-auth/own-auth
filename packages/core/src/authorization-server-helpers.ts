@@ -1,9 +1,11 @@
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import type { AuthorizationServerRuntimeConfig } from "./authorization-server-config.js";
 import type { AuthorizationServerStorage } from "./authorization-server-storage.js";
+import { deviceAuthorizationGrantType } from "./authorization-server-device-types.js";
 import type {
   AuthorizationApplicationType,
   AuthorizationClient,
+  AuthorizationClientGrantType,
   AuthorizationPrompt,
   StoredAuthorizationRequest
 } from "./authorization-server-types.js";
@@ -141,10 +143,16 @@ export function hashAuthorizationSecret(ctx: AuthEngineContext, value: string): 
 
 export function normalizeClientRedirectUris(
   applicationType: AuthorizationApplicationType,
-  values: readonly string[]
+  values: readonly string[],
+  grantTypes: readonly AuthorizationClientGrantType[]
 ): string[] {
-  if (!Array.isArray(values) || values.length < 1 || values.length > 20) {
-    throw validationError("redirectUris must contain between 1 and 20 URLs");
+  const minimum = grantTypes.includes("authorization_code") ? 1 : 0;
+  if (!Array.isArray(values) || values.length < minimum || values.length > 20) {
+    throw validationError(
+      minimum === 1
+        ? "redirectUris must contain between 1 and 20 URLs"
+        : "redirectUris must contain at most 20 URLs"
+    );
   }
   const redirectUris = values.map((value) => {
     if (typeof value !== "string" || value.length > 2_048) {
@@ -167,6 +175,28 @@ export function normalizeClientRedirectUris(
     throw validationError("redirectUris must not contain duplicates");
   }
   return redirectUris;
+}
+
+export function normalizeClientGrantTypes(
+  values: readonly AuthorizationClientGrantType[] | undefined
+): AuthorizationClientGrantType[] {
+  const grantTypes = values
+    ? [...values]
+    : ["authorization_code", "refresh_token"] satisfies AuthorizationClientGrantType[];
+  const supported = new Set<AuthorizationClientGrantType>([
+    "authorization_code",
+    "refresh_token",
+    deviceAuthorizationGrantType
+  ]);
+  if (
+    grantTypes.length < 1 ||
+    grantTypes.length > supported.size ||
+    new Set(grantTypes).size !== grantTypes.length ||
+    grantTypes.some((grantType) => !supported.has(grantType))
+  ) {
+    throw validationError("grantTypes contains an unsupported or duplicate grant type");
+  }
+  return grantTypes;
 }
 
 export function normalizeAllowedScopes(

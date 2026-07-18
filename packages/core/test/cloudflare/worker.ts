@@ -4,6 +4,7 @@ import {
   handleAuthRpc,
   handleAuthorizationStorageRpc,
   handleCloseLifecycle,
+  handleDeviceAuthorizationStorageRpc,
   handleDpopCrypto,
   handleSamlEngineQualification,
   handleWebhookFlow,
@@ -34,6 +35,8 @@ export default {
           return await handleAuthRpc(request, env.DB);
         case "/conformance/authorization-storage":
           return await handleAuthorizationStorageRpc(request, env.DB);
+        case "/conformance/device-authorization-storage":
+          return await handleDeviceAuthorizationStorageRpc(request, env.DB);
         case "/conformance/storage":
           return await handleStorageRpc(request, env.DB);
         case "/conformance/rate-limit":

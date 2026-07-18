@@ -126,18 +126,32 @@ export function approvedInteractionScopes(
   action: AuthorizationInteractionAction,
   approved: string[] | undefined
 ): string[] {
-  if (action !== "consent" && approved === undefined) return [...request.scopes];
+  return approvedAuthorizationScopes(
+    request.scopes,
+    grant,
+    action,
+    approved
+  );
+}
+
+export function approvedAuthorizationScopes(
+  requestedScopes: readonly string[],
+  grant: AuthorizationGrant | null,
+  action: AuthorizationInteractionAction,
+  approved: string[] | undefined
+): string[] {
+  if (action !== "consent" && approved === undefined) return [...requestedScopes];
   if (!approved || approved.length === 0 || new Set(approved).size !== approved.length) {
     throw new AuthError("validation_error", "approvedScopes must not be empty", 400);
   }
-  if (approved.some((scope) => !request.scopes.includes(scope))) {
+  if (approved.some((scope) => !requestedScopes.includes(scope))) {
     throw new AuthError(
       "validation_error",
       "approvedScopes must be requested by the client",
       400
     );
   }
-  if (request.scopes.includes("openid") && !approved.includes("openid")) {
+  if (requestedScopes.includes("openid") && !approved.includes("openid")) {
     throw new AuthError("validation_error", "The openid scope cannot be removed", 400);
   }
   if (action !== "consent" && grant) {

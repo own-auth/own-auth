@@ -17,8 +17,9 @@ This is different from Google, GitHub, or Apple sign-in. External provider sign-
 - OpenID Connect userinfo
 - Discovery metadata and JWKS
 - Consent, reauthentication, account selection, and AAL2 step-up interactions
+- Optional RFC 8628 device authorization for command-line tools and input-limited devices
 
-Device authorization, SCIM, and MCP authorization are not part of this release. Organisation SAML sign-in is a separate integration documented in [SAML SSO](/docs/saml); it is not an authorization-server protocol mode.
+SCIM and MCP authorization are not authorization-server protocol modes in this release. Organisation SAML sign-in is a separate integration documented in [SAML SSO](/docs/saml).
 
 ## Run The Migration
 
@@ -26,7 +27,7 @@ Device authorization, SCIM, and MCP authorization are not part of this release. 
 npx own-auth migrate
 ```
 
-Migration `011_authorization_server` adds authorization clients, secrets, interactions, grants, codes, access tokens, refresh tokens, and stable OpenID Connect subjects. Migration `012_protected_resources` adds registered resource servers, hashed resource secrets, and token audience bindings. Migration `013_dpop` adds DPoP bindings and proof replay protection.
+Migration `011_authorization_server` adds authorization clients, secrets, interactions, grants, codes, access tokens, refresh tokens, and stable OpenID Connect subjects. Migration `012_protected_resources` adds registered resource servers, hashed resource secrets, and token audience bindings. Migration `013_dpop` adds DPoP bindings and proof replay protection. Migration `016_device_authorization` adds client grant types and short-lived device authorization records.
 
 ## Configuration
 
@@ -73,6 +74,9 @@ export const auth = createOwnAuth({
       },
     },
     dpop: {},
+    deviceAuthorization: {
+      verificationUrl: "https://auth.example.com/device",
+    },
   },
 });
 ```
@@ -82,6 +86,8 @@ export const auth = createOwnAuth({
 The encryption key protects stored authorization requests and OIDC nonces. The RSA key signs ID tokens. Keep both on the server.
 
 `dpop` enables DPoP support. The default proof lifetime is five minutes with one minute of clock skew. Omit `dpop` when the authorization server will issue only Bearer tokens.
+
+`deviceAuthorization` enables RFC 8628 device authorization. `verificationUrl` is an application-owned page where the user signs in and approves or denies the short code.
 
 ## Mount The Protocol Handler
 
@@ -115,6 +121,7 @@ The handler serves:
 | `GET` | `/.well-known/oauth-authorization-server` | OAuth metadata |
 | `GET` | `/.well-known/openid-configuration` | OpenID Connect metadata |
 | `GET` | `/oauth/authorize` | Start authorization |
+| `POST` | `/oauth/device/authorize` | Start device authorization |
 | `POST` | `/oauth/token` | Exchange a code or rotate a refresh token |
 | `POST` | `/oauth/revoke` | Revoke an access token or refresh grant |
 | `POST` | `/oauth/introspect` | Inspect tokens owned by a confidential client or protected resource |
@@ -140,6 +147,8 @@ console.log(created.client.clientId);
 ```
 
 Public clients use PKCE and do not receive a secret.
+
+Device-only clients can omit redirect URIs and use the device grant explicitly. See [Device Authorization](/docs/device-authorization) for client registration, the verification page, polling, DPoP binding, cleanup, and RFC error behavior.
 
 Confidential clients receive a secret once:
 

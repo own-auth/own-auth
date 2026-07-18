@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- RFC 8628 device authorization through `POST /oauth/device/authorize`, the existing OAuth token endpoint, application-owned verification-page SDK methods, and the portable `own-auth/device-authorization` client.
+- Device-only authorization clients with explicit grant types, optional DPoP key binding, discovery metadata, OpenAPI coverage, and migration `016_device_authorization` for Postgres and Cloudflare D1.
+
+### Security
+
+- Device and user codes are stored only as peppered, purpose-separated hashes. Approval, denial, and token exchange are atomic so concurrent requests produce one winner.
+- Wrong-client and unknown-code polls are indistinguishable, polling intervals and `slow_down` penalties are persisted, and verification-page error codes never leak through the RFC token endpoint.
+
 ## 0.3.5
 
 ### Added

@@ -6,10 +6,14 @@ import { join } from "node:path";
 import type { RateLimitStore } from "../packages/core/src/rate-limit.js";
 import type { AuthStorage } from "../packages/core/src/storage.js";
 import type { ScimStorage } from "../packages/core/src/scim-storage.js";
+import type { SamlStorage } from "../packages/core/src/saml-storage.js";
 import type {
   AuthorizationServerStorage,
   DpopStorage
 } from "../packages/core/src/authorization-server-storage.js";
+import type {
+  DeviceAuthorizationStorage
+} from "../packages/core/src/authorization-server-device-storage.js";
 import {
   atomicAdapterCases,
   type AtomicAdapterHarness
@@ -36,6 +40,9 @@ import {
 } from "./authorization-server-conformance.js";
 import { assertScimVersionRace } from "./scim-worker-conformance.js";
 import { assertSamlResponseRace } from "./saml-worker-conformance.js";
+import {
+  assertDeviceAuthorizationRaces
+} from "./device-authorization-worker-conformance.js";
 
 const root = new URL("..", import.meta.url);
 const config = "packages/core/test/cloudflare/wrangler.jsonc";
@@ -67,6 +74,20 @@ try {
   );
   await assertDpopReplayRace(
     createRemoteProxy<DpopStorage>(origin, "authorization-storage")
+  );
+  await assertDeviceAuthorizationRaces(
+    createRemoteProxy<AuthStorage>(origin, "storage"),
+    createRemoteProxy<AuthorizationServerStorage>(origin, "authorization-storage"),
+    [
+      createRemoteProxy<DeviceAuthorizationStorage>(
+        origin,
+        "device-authorization-storage"
+      ),
+      createRemoteProxy<DeviceAuthorizationStorage>(
+        origin,
+        "device-authorization-storage"
+      )
+    ]
   );
   await assertSamlResponseRace(
     createRemoteProxy<AuthStorage>(origin, "storage"),
@@ -117,7 +138,8 @@ try {
 
   console.log(
     `Cloudflare D1 passed ${atomicAdapterCases.length} atomic cases, ` +
-    `${authConcurrencyCases.length} auth races, DPoP, SAML, SCIM, webhook, lifecycle, migration, ` +
+    `${authConcurrencyCases.length} auth races, device authorization, DPoP, SAML, SCIM, ` +
+    "webhook, lifecycle, migration, " +
     "secret, and close checks."
   );
 } catch (error) {
@@ -179,7 +201,7 @@ async function assertDpopReplayRace(storage: DpopStorage): Promise<void> {
 function createRemoteProxy<T extends object>(
   origin: string,
   resource: "auth" | "storage" | "rate-limit" | "authorization-storage" |
-    "saml-storage" | "scim-storage",
+    "device-authorization-storage" | "saml-storage" | "scim-storage",
   options?: ConformanceRpcRequest["options"]
 ): T {
   return new Proxy({}, {

@@ -13,7 +13,8 @@ export const coreMigrationFiles = [
   "012_protected_resources.sql",
   "013_dpop.sql",
   "014_saml.sql",
-  "015_scim.sql"
+  "015_scim.sql",
+  "016_device_authorization.sql"
 ] as const;
 
 export const initialMigration = coreMigrationFiles[0];
@@ -58,5 +59,6 @@ export const databaseTables = {
   samlAssertionReplays: "own_auth_saml_assertion_replays",
   scimConnections: "own_auth_scim_connections",
   scimTokens: "own_auth_scim_tokens",
-  scimUsers: "own_auth_scim_users"
+  scimUsers: "own_auth_scim_users",
+  deviceAuthorizations: "own_auth_device_authorizations"
 } as const;
