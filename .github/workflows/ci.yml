@@ -60,8 +60,8 @@ jobs:
       - name: Typecheck public contracts
         run: pnpm typecheck
 
-      - name: Check lazy Postgres loading
-        run: pnpm postgres-loading:check
+      - name: Check root package loading
+        run: pnpm root-loading:check
 
       - name: Check D1 package resolution
         run: pnpm d1-resolution:check
