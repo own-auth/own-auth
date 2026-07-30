@@ -122,6 +122,7 @@
     "./migrations/014_saml.sql": "./migrations/014_saml.sql",
     "./migrations/015_scim.sql": "./migrations/015_scim.sql",
     "./migrations/016_device_authorization.sql": "./migrations/016_device_authorization.sql",
+    "./migrations/017_atomic_auth_operations.sql": "./migrations/017_atomic_auth_operations.sql",
     "./migrations/d1/*.sql": "./migrations/d1/*.sql",
     "./docs/installation.md": "./docs/installation.md",
     "./docs/cloudflare-d1.md": "./docs/cloudflare-d1.md",

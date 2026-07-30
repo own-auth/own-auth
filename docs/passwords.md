@@ -30,6 +30,7 @@ Send `sessionToken` to the client securely using an `HttpOnly` cookie, a secure 
 |---|---|
 | `email_already_exists` | An account with the email already exists. |
 | `weak_password` | The password is shorter than the configured minimum. |
+| `password_too_long` | The password exceeds the configured maximum. |
 | `rate_limited` | Too many sign-up attempts. |
 
 ```ts
@@ -115,11 +116,12 @@ const auth = createOwnAuth({
   tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
   password: {
     minLength: 10, // default: 8
+    maxLength: 128, // default: 128
   },
 });
 ```
 
-Own Auth does not enforce uppercase, number, or symbol rules. Set the minimum length required by the application.
+Own Auth does not enforce uppercase, number, or symbol rules. Set the length range required by the application.
 
 ## Next step
 

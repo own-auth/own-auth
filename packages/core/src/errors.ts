@@ -9,6 +9,7 @@ export type AuthErrorCode =
   | "disabled_user"
   | "rate_limited"
   | "weak_password"
+  | "password_too_long"
   | "redirect_not_allowed"
   | "invalid_otp"
   | "otp_attempts_exceeded"

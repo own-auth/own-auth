@@ -21,8 +21,8 @@ export function readSessionToken(
   options: OwnAuthSessionCookieOptions = {}
 ): { token: string | null; source: "bearer" | "cookie" | null } {
   const authorization = request.headers.get("authorization");
-  const [scheme, tokenValue] = authorization?.trim().split(/\s+/, 2) ?? [];
-  if (scheme?.toLowerCase() === "bearer") {
+  const [scheme, tokenValue, extra] = authorization?.trim().split(/\s+/) ?? [];
+  if (scheme?.toLowerCase() === "bearer" && !extra) {
     const token = tokenValue?.trim() ?? "";
     if (token) {
       return { token, source: "bearer" };
@@ -174,8 +174,8 @@ function readCookie(request: Request, name: string): string | null {
   return parseCookieHeader(request.headers.get("cookie")).get(name) ?? null;
 }
 
-function parseCookieHeader(value: string | null): Map<string, string> {
-  const cookies = new Map<string, string>();
+function parseCookieHeader(value: string | null): Map<string, string | null> {
+  const cookies = new Map<string, string | null>();
   if (!value) {
     return cookies;
   }
@@ -188,6 +188,10 @@ function parseCookieHeader(value: string | null): Map<string, string> {
 
     const name = part.slice(0, separator).trim();
     const encodedValue = part.slice(separator + 1).trim();
+    if (cookies.has(name)) {
+      cookies.set(name, null);
+      continue;
+    }
     try {
       cookies.set(name, decodeURIComponent(encodedValue));
     } catch {

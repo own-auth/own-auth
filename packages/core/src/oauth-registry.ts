@@ -11,7 +11,7 @@ export function createOAuthProviderRegistry(
   options?: OAuthOptions
 ): ReadonlyMap<ExternalAccountProvider, OAuthProviderAdapter> {
   const providers = new Map<ExternalAccountProvider, OAuthProviderAdapter>();
-  const fetchImpl = options?.fetch ?? globalThis.fetch;
+  const fetchImpl = options?.fetch;
   const configured = options?.providers;
   if (configured?.google) {
     providers.set("google", new GoogleOAuthAdapter(configured.google, fetchImpl));

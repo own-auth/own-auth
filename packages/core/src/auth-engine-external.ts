@@ -1,5 +1,6 @@
 import { AuthError } from "./errors.js";
-import { normalizeEmail } from "./normalise.js";
+import { createId } from "./crypto.js";
+import { isValidEmailAddress, normalizeEmail } from "./normalise.js";
 import {
   isExternalAccountProvider,
   type VerifiedProviderIdentity
@@ -16,13 +17,15 @@ import {
   accountFor,
   assertUserEnabled,
   audit,
-  hasRemainingAuthenticationMethod,
+  createAuditEvent,
   rateLimit,
   requireActiveUser,
+  requireValidEmail,
   userFor,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
+import { prepareAuthEventWrite } from "./webhook-outbox.js";
 
 export async function signInWithVerifiedExternalIdentity(
   ctx: AuthEngineContext,
@@ -62,21 +65,28 @@ export async function unlinkOAuthProvider(
   if (!account || account.userId !== user.id) {
     throw new AuthError("invalid_credentials", "External provider account not found", 404);
   }
-  if (!await hasRemainingAuthenticationMethod(ctx, user, { accountId: account.id })) {
+  const removed = await ctx.storage.removeAuthenticationMethodAtomically({
+    operationId: createId("op"),
+    userId: user.id,
+    method: { kind: "account", id: account.id },
+    event: prepareAuthEventWrite(ctx, createAuditEvent({
+      eventType: "external_provider.unlinked",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      request: input.request,
+      metadata: { provider }
+    }))
+  });
+  if (removed === "last_method") {
     throw new AuthError(
       "authentication_method_required",
       "Add another sign-in method before unlinking this provider",
       409
     );
   }
-  await ctx.storage.deleteAccount(account.id);
-  await audit(ctx, {
-    eventType: "external_provider.unlinked",
-    actorUserId: user.id,
-    targetUserId: user.id,
-    context: input.request,
-    metadata: { provider }
-  });
+  if (removed === "not_found") {
+    throw new AuthError("invalid_credentials", "External provider account not found", 404);
+  }
 }
 
 export async function resolveExternalIdentity(
@@ -149,7 +159,7 @@ function normalizeTrustedIdentity(input: VerifiedExternalIdentityInput): Verifie
   if (!providerAccountId) {
     throw new AuthError("validation_error", "providerAccountId is required", 400);
   }
-  const email = input.email ? normalizeEmail(input.email) : null;
+  const email = input.email === undefined ? null : requireValidEmail(input.email);
   if (email && input.emailVerified !== true) {
     throw new AuthError("validation_error", "External provider email must be verified", 400);
   }
@@ -171,7 +181,18 @@ function normalizeExternalProvider(provider: string): ExternalAccountProvider {
 }
 
 function verifiedEmail(identity: VerifiedProviderIdentity): string | null {
-  return identity.email && identity.emailVerified ? normalizeEmail(identity.email) : null;
+  if (!identity.email || !identity.emailVerified) {
+    return null;
+  }
+  const email = normalizeEmail(identity.email);
+  if (!isValidEmailAddress(email)) {
+    throw new AuthError(
+      "oauth_verified_email_required",
+      "A valid verified provider email is required to create an account",
+      409
+    );
+  }
+  return email;
 }
 
 async function createLinkedAccount(

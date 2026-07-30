@@ -12,9 +12,14 @@ import type {
 import type { SessionResult } from "./auth-engine-types.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { hash } from "./auth-engine-token-helpers.js";
-import { isExternalAccountProvider } from "./oauth-types.js";
 import { recordAuthEvent } from "./webhook-outbox.js";
 import { isRecord } from "./value-guards.js";
+import {
+  isValidEmailAddress,
+  isValidE164Phone,
+  normalizeEmail,
+  normalizePhone
+} from "./normalise.js";
 
 export function requestContextFrom(input: unknown): RequestContext {
   return isRecord(input) && isRecord(input.request)
@@ -130,7 +135,10 @@ export async function markUserLoggedIn(ctx: AuthEngineContext, user: User): Prom
     updatedAt: new Date()
   });
 
-  return updatedUser ?? user;
+  if (!updatedUser || updatedUser.disabledAt) {
+    throw new AuthError("invalid_credentials", "Authentication failed", 401);
+  }
+  return updatedUser;
 }
 
 export function accountFor(
@@ -215,26 +223,24 @@ export async function requireActiveUser(
   return user;
 }
 
-export async function hasRemainingAuthenticationMethod(
-  ctx: AuthEngineContext,
-  user: User,
-  excluded: { accountId?: string; passkeyId?: string }
-): Promise<boolean> {
-  const [accounts, passkeys] = await Promise.all([
-    ctx.storage.listAccountsByUserId(user.id),
-    ctx.storage.listPasskeyCredentialsByUserId(user.id)
-  ]);
-  return Boolean(
-    user.passwordHash ||
-    user.email ||
-    user.phone ||
-    accounts.some(
-      (account) => account.id !== excluded.accountId && (
-        isExternalAccountProvider(account.provider) || account.provider.startsWith("saml.")
-      )
-    ) ||
-    passkeys.some((passkey) => passkey.id !== excluded.passkeyId)
-  );
+export function requireValidEmail(value: string): string {
+  const email = normalizeEmail(value);
+  if (!isValidEmailAddress(email)) {
+    throw new AuthError("validation_error", "Email address is invalid", 400);
+  }
+  return email;
+}
+
+export function requireValidPhone(value: string): string {
+  const phone = normalizePhone(value);
+  if (!isValidE164Phone(phone)) {
+    throw new AuthError(
+      "validation_error",
+      "Phone numbers must use E.164 format",
+      400
+    );
+  }
+  return phone;
 }
 
 export async function uniqueOrganisationSlug(

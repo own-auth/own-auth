@@ -1,3 +1,4 @@
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 import { coreAuditEventTypes } from "./types.js";
 import type { WebhookEventType, WebhookOptions } from "./webhook-types.js";
 
@@ -59,7 +60,7 @@ export function normalizeWebhookOptions(options?: WebhookOptions): WebhookRuntim
     };
   });
 
-  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const fetchImpl = resolveFetchImplementation(options.fetch);
   if (typeof fetchImpl !== "function") {
     throw new Error("Webhook delivery requires a fetch implementation");
   }

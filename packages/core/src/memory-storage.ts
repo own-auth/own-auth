@@ -1,4 +1,12 @@
 import type {
+  AtomicAuthEventWrite,
+  AtomicAuthenticationMethodRemovalInput,
+  AtomicAuthenticationMethodRemovalResult,
+  AtomicInvitationAcceptanceInput,
+  AtomicInvitationAcceptanceResult,
+  AtomicInvitationRevocationInput
+} from "./auth-storage-atomic.js";
+import type {
   AuditEventFilter,
   AuthStorage,
   ListUsersFilter,
@@ -10,6 +18,7 @@ import {
   findStored,
   updateStoredEntity
 } from "./memory-storage-helpers.js";
+import { createIdentityConflictError } from "./errors.js";
 import type {
   Account,
   ApiKey,
@@ -61,11 +70,17 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
   });
 
   async createUser(user: User): Promise<User> {
+    this.assertUserIdentityAvailable(user);
     this.users.set(user.id, clone(user));
     return clone(user);
   }
 
   async updateUser(id: string, patch: Partial<User>): Promise<User | null> {
+    const existing = this.users.get(id);
+    if (!existing) {
+      return null;
+    }
+    this.assertUserIdentityAvailable({ ...existing, ...patch, id }, id);
     return updateStoredEntity(this.users, id, patch);
   }
 
@@ -104,19 +119,27 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
   }
 
   async createUserAndAccount(user: User, account: Account): Promise<Account> {
-    if (
-      (user.email && await this.getUserByEmail(user.email)) ||
-      (user.phone && await this.getUserByPhone(user.phone)) ||
-      await this.getAccountByProvider(account.provider, account.providerAccountId)
-    ) {
-      throw new Error("User or external account already exists");
-    }
+    this.assertUserIdentityAvailable(user);
     this.users.set(user.id, clone(user));
     try {
       return await this.createAccount(account);
     } catch (error) {
       this.users.delete(user.id);
       throw error;
+    }
+  }
+
+  private assertUserIdentityAvailable(user: User, excludeId?: string): void {
+    for (const candidate of this.users.values()) {
+      if (candidate.id === excludeId) {
+        continue;
+      }
+      if (user.email && candidate.email === user.email) {
+        throw createIdentityConflictError("email");
+      }
+      if (user.phone && candidate.phone === user.phone) {
+        throw createIdentityConflictError("phone");
+      }
     }
   }
 
@@ -406,6 +429,154 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     return matching[0] ? clone(matching[0]) : null;
   }
 
+  async acceptInvitationAtomically(
+    input: AtomicInvitationAcceptanceInput
+  ): Promise<AtomicInvitationAcceptanceResult | null> {
+    const token = this.tokens.get(input.tokenId);
+    const invitation = this.invitations.get(input.invitationId);
+    const user = this.users.get(input.userId);
+    const organisation = invitation
+      ? this.organisations.get(invitation.organisationId)
+      : undefined;
+    if (
+      !token ||
+      token.tokenHash !== input.tokenHash ||
+      token.type !== "organisation_invite" ||
+      token.usedAt ||
+      token.expiresAt <= input.acceptedAt ||
+      !invitation ||
+      invitation.tokenId !== token.id ||
+      invitation.status !== "pending" ||
+      invitation.expiresAt <= input.acceptedAt ||
+      invitation.organisationId !== token.organisationId ||
+      !invitation.email ||
+      invitation.email !== token.email ||
+      !user ||
+      user.disabledAt ||
+      user.email !== token.email ||
+      !organisation ||
+      organisation.disabledAt
+    ) {
+      return null;
+    }
+
+    const existingMember = [...this.members.values()].find(
+      (member) =>
+        member.organisationId === invitation.organisationId &&
+        member.userId === user.id
+    );
+    const member: OrganisationMember<string> = existingMember
+      ? {
+          ...existingMember,
+          role: invitation.role,
+          status: "active",
+          joinedAt: existingMember.joinedAt ?? input.acceptedAt,
+          removedAt: null,
+          updatedAt: input.acceptedAt
+        }
+      : {
+          id: input.memberId,
+          organisationId: invitation.organisationId,
+          userId: user.id,
+          role: invitation.role,
+          status: "active",
+          joinedAt: input.acceptedAt,
+          removedAt: null,
+          createdAt: input.acceptedAt,
+          updatedAt: input.acceptedAt
+        };
+    const acceptedInvitation: Invitation<string> = {
+      ...invitation,
+      status: "accepted",
+      acceptedAt: input.acceptedAt
+    };
+
+    this.recordAtomicEvent(input.event);
+    this.tokens.set(token.id, clone({ ...token, usedAt: input.acceptedAt }));
+    this.members.set(member.id, clone(member));
+    this.invitations.set(invitation.id, clone(acceptedInvitation));
+
+    return {
+      invitation: clone(acceptedInvitation),
+      member: clone(member)
+    };
+  }
+
+  async removeAuthenticationMethodAtomically(
+    input: AtomicAuthenticationMethodRemovalInput
+  ): Promise<AtomicAuthenticationMethodRemovalResult> {
+    const user = this.users.get(input.userId);
+    const account = input.method.kind === "account"
+      ? this.accounts.get(input.method.id)
+      : undefined;
+    const passkey = input.method.kind === "passkey"
+      ? this.passkeys.get(input.method.id)
+      : undefined;
+    if (
+      !user ||
+      (input.method.kind === "account" && account?.userId !== user.id) ||
+      (input.method.kind === "passkey" && passkey?.userId !== user.id)
+    ) {
+      return "not_found";
+    }
+
+    const hasRemainingMethod = Boolean(
+      user.passwordHash ||
+      user.email ||
+      user.phone ||
+      [...this.accounts.values()].some(
+        (candidate) =>
+          candidate.userId === user.id &&
+          (input.method.kind !== "account" || candidate.id !== input.method.id) &&
+          isLoginAccount(candidate)
+      ) ||
+      [...this.passkeys.values()].some(
+        (candidate) =>
+          candidate.userId === user.id &&
+          (input.method.kind !== "passkey" || candidate.id !== input.method.id)
+      )
+    );
+    if (!hasRemainingMethod) {
+      return "last_method";
+    }
+
+    this.recordAtomicEvent(input.event);
+    if (input.method.kind === "account") {
+      this.deleteStoredAccount(input.method.id);
+    } else {
+      this.deleteStoredPasskey(input.method.id);
+    }
+    return "removed";
+  }
+
+  async revokeInvitationAtomically(
+    input: AtomicInvitationRevocationInput
+  ): Promise<Invitation<string> | null> {
+    const invitation = this.invitations.get(input.invitationId);
+    if (!invitation || invitation.status !== "pending") {
+      return null;
+    }
+
+    const revokedInvitation: Invitation<string> = {
+      ...invitation,
+      status: "revoked",
+      revokedAt: input.revokedAt
+    };
+    const token = invitation.tokenId
+      ? this.tokens.get(invitation.tokenId)
+      : undefined;
+
+    this.recordAtomicEvent(input.event);
+    this.invitations.set(invitation.id, clone(revokedInvitation));
+    if (token) {
+      this.tokens.set(token.id, clone({
+        ...token,
+        usedAt: token.usedAt ?? input.revokedAt
+      }));
+    }
+    return clone(revokedInvitation);
+  }
+
   async createAuditEvent(event: AuditEvent): Promise<AuditEvent> {
     this.auditEvents.set(event.id, clone(event));
     return clone(event);
@@ -446,6 +617,33 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
 
     return deleted;
   }
+
+  private recordAtomicEvent(write: AtomicAuthEventWrite): void {
+    if (write.webhookEvent) {
+      this.webhookStorage.recordAuditEventWithWebhooksSync(
+        write.auditEvent,
+        write.webhookEvent,
+        write.webhookDeliveries
+      );
+      return;
+    }
+    if (write.webhookDeliveries.length > 0) {
+      throw new Error("Webhook deliveries require a webhook event");
+    }
+    if (this.auditEvents.has(write.auditEvent.id)) {
+      throw new Error("Audit event already exists");
+    }
+    this.auditEvents.set(write.auditEvent.id, clone(write.auditEvent));
+  }
+}
+
+function isLoginAccount(account: Account): boolean {
+  return (
+    account.provider === "apple" ||
+    account.provider === "github" ||
+    account.provider === "google" ||
+    account.provider.startsWith("saml.")
+  );
 }
 
 function compareNewestFirst(

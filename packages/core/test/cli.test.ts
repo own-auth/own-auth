@@ -41,6 +41,7 @@ describe("own-auth CLI", () => {
     expect(output().stdout).toContain("014_saml");
     expect(output().stdout).toContain("015_scim");
     expect(output().stdout).toContain("016_device_authorization");
+    expect(output().stdout).toContain("017_atomic_auth_operations");
     expect(output().stdout).toContain(
       "references own_auth_webhook_deliveries(id) on delete cascade"
     );
@@ -130,7 +131,7 @@ describe("own-auth CLI", () => {
     expect(exitCode).toBe(0);
     expect(output().stdout).toBe(
       "Database: connected\n" +
-      "Migration version: 016_device_authorization\n" +
+      "Migration version: 017_atomic_auth_operations\n" +
       "Status: current\n"
     );
     expect(output().stderr).toBe("");

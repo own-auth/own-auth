@@ -5,8 +5,10 @@ import {
   createOwnAuth,
   InMemoryAuthStorage,
   MemoryEmailProvider,
-  MemorySmsProvider
+  MemorySmsProvider,
+  type ApiKey
 } from "../src/index.js";
+import { hashSecret } from "../src/crypto.js";
 import { assertSingleSettledWinner } from "./conformance/conformance-assertions.js";
 
 function createHarness(
@@ -62,6 +64,29 @@ describe("OwnAuth security regressions", () => {
     });
   });
 
+  it("allows only one concurrent in-memory signup for the same email", async () => {
+    const { auth, storage } = createHarness();
+    const input = {
+      email: "concurrent-signup@example.com",
+      password: "correct-horse"
+    };
+
+    const results = await Promise.allSettled([
+      auth.signUpEmailPassword(input),
+      auth.signUpEmailPassword(input)
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toEqual([
+      expect.objectContaining({
+        reason: expect.objectContaining({ code: "email_already_exists" })
+      })
+    ]);
+    const users = await storage.listUsers({ query: input.email });
+    expect(users).toHaveLength(1);
+    await expect(storage.listSessionsByUserId(users[0]?.id ?? "")).resolves.toHaveLength(1);
+  });
+
   it("rejects weak passwords before creating users", async () => {
     const { auth } = createHarness();
 
@@ -69,6 +94,16 @@ describe("OwnAuth security regressions", () => {
       auth.signUpEmailPassword({ email: "weak@example.com", password: "short" })
     ).rejects.toMatchObject({ code: "weak_password" });
     await expect(auth.storage.getUserByEmail("weak@example.com")).resolves.toBeNull();
+  });
+
+  it("rejects oversized new passwords before hashing or creating users", async () => {
+    const { auth } = createHarness({ password: { maxLength: 128 } });
+
+    await expect(auth.signUpEmailPassword({
+      email: "oversized@example.com",
+      password: "a".repeat(129)
+    })).rejects.toMatchObject({ code: "password_too_long" });
+    await expect(auth.storage.getUserByEmail("oversized@example.com")).resolves.toBeNull();
   });
 
   it("blocks disabled users from signing in and invalidates their current sessions", async () => {
@@ -90,6 +125,25 @@ describe("OwnAuth security regressions", () => {
       })
     ).rejects.toMatchObject({ code: "disabled_user" });
     await expect(auth.getCurrentSession(signup.sessionToken)).resolves.toBeNull();
+  });
+
+  it("does not create a session when a user is disabled during sign-in", async () => {
+    const storage = new DisableUserOnLoginStorage();
+    const auth = createOwnAuth({
+      storage,
+      tokenPepper: "disabled-during-sign-in"
+    });
+    const signup = await auth.signUpEmailPassword({
+      email: "disabled-race@example.com",
+      password: "correct-horse"
+    });
+    storage.disableOnNextLogin(signup.user.id);
+
+    await expect(auth.signInEmailPassword({
+      email: "disabled-race@example.com",
+      password: "correct-horse"
+    })).rejects.toMatchObject({ code: "invalid_credentials" });
+    await expect(storage.listSessionsByUserId(signup.user.id)).resolves.toHaveLength(1);
   });
 
   it("rate limits repeated password sign-in failures", async () => {
@@ -160,6 +214,24 @@ describe("OwnAuth security regressions", () => {
     expect(signin.user.id).toBe(signup.user.id);
   });
 
+  it("does not treat an empty password as a passwordless signup", async () => {
+    const { auth } = createHarness();
+
+    await expect(auth.signUpEmailPassword({
+      email: "empty-password@example.com",
+      password: ""
+    })).rejects.toMatchObject({ code: "weak_password" });
+    await expect(auth.createUser({
+      email: "empty-direct-password@example.com",
+      password: ""
+    })).rejects.toMatchObject({ code: "weak_password" });
+
+    await expect(auth.storage.getUserByEmail("empty-password@example.com"))
+      .resolves.toBeNull();
+    await expect(auth.storage.getUserByEmail("empty-direct-password@example.com"))
+      .resolves.toBeNull();
+  });
+
   it("rejects new external provider links with unverified emails", async () => {
     const { auth } = createHarness();
 
@@ -208,18 +280,24 @@ describe("OwnAuth security regressions", () => {
   });
 
   it("rejects expired absolute and idle sessions", async () => {
-    const absolute = createHarness({ session: { ttlMs: -1, idleTtlMs: 60_000 } });
+    const absolute = createHarness();
     const expiredAbsolute = await absolute.auth.signUpEmailPassword({
       email: "absolute@example.com",
       password: "correct-horse"
     });
+    await absolute.storage.updateSession(expiredAbsolute.session.id, {
+      expiresAt: new Date(Date.now() - 1)
+    });
 
     await expect(absolute.auth.getCurrentSession(expiredAbsolute.sessionToken)).resolves.toBeNull();
 
-    const idle = createHarness({ session: { ttlMs: 60_000, idleTtlMs: -1 } });
+    const idle = createHarness();
     const expiredIdle = await idle.auth.signUpEmailPassword({
       email: "idle@example.com",
       password: "correct-horse"
+    });
+    await idle.storage.updateSession(expiredIdle.session.id, {
+      idleExpiresAt: new Date(Date.now() - 1)
     });
 
     await expect(idle.auth.getCurrentSession(expiredIdle.sessionToken)).resolves.toBeNull();
@@ -287,6 +365,33 @@ describe("OwnAuth security regressions", () => {
     expect(JSON.stringify(logs)).not.toContain("999999");
   });
 
+  it("fails instead of silently dropping email or SMS in production", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      await expect(new ConsoleEmailProvider().send({
+        to: "user@example.com",
+        type: "magic_link",
+        token: "raw-email-token",
+        url: "https://app.example.com/auth?token=raw-email-token",
+        expiresAt: new Date("2026-01-01T00:00:00.000Z")
+      })).rejects.toThrow("Email delivery must be configured in production.");
+      await expect(new ConsoleSmsProvider().send({
+        to: "+15550000000",
+        purpose: "phone_login",
+        code: "999999",
+        expiresAt: new Date("2026-01-01T00:00:00.000Z")
+      })).rejects.toThrow("SMS delivery must be configured in production.");
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
   it("prevents magic-link open redirects but allows relative redirects", async () => {
     const { auth, emailProvider } = createHarness({
       redirectAllowlist: ["http://localhost:3000"]
@@ -347,20 +452,25 @@ describe("OwnAuth security regressions", () => {
 
     const result = await auth.requestMagicLink({ email: "unknown@example.com" });
 
-    expect(result).toEqual({ sent: true, expiresAt: null });
+    expect(result).toMatchObject({
+      sent: true,
+      expiresAt: expect.any(Date)
+    });
     expect(emailProvider.messages).toHaveLength(0);
     await expect(auth.storage.getUserByEmail("unknown@example.com")).resolves.toBeNull();
   });
 
   it("rejects expired magic-link tokens", async () => {
-    const { auth, emailProvider } = createHarness({
-      tokenTtlMs: { magic_link: -1 }
-    });
+    const { auth, emailProvider, storage } = createHarness();
 
     await auth.requestMagicLink({ email: "expired-magic@example.com" });
+    const rawToken = emailProvider.messages.at(-1)?.token ?? "";
+    const token = await storage.getTokenByHash(hashSecret(rawToken), "magic_link");
+    if (!token) throw new Error("Expected stored magic-link token");
+    await storage.updateToken(token.id, { expiresAt: new Date(Date.now() - 1) });
 
     await expect(
-      auth.verifyMagicLink({ token: emailProvider.messages.at(-1)?.token ?? "" })
+      auth.verifyMagicLink({ token: rawToken })
     ).rejects.toMatchObject({ code: "expired_token" });
   });
 
@@ -369,7 +479,7 @@ describe("OwnAuth security regressions", () => {
 
     await expect(
       auth.requestEmailVerification({ email: "missing@example.com" })
-    ).resolves.toEqual({ sent: true, expiresAt: null });
+    ).resolves.toMatchObject({ sent: true, expiresAt: expect.any(Date) });
     expect(emailProvider.messages).toHaveLength(0);
   });
 
@@ -422,28 +532,87 @@ describe("OwnAuth security regressions", () => {
     );
   });
 
+  it("rejects email tokens after the account email changes", async () => {
+    const { auth, emailProvider } = createHarness();
+    const magicUser = await auth.createUser({ email: "old-magic@example.com" });
+    await auth.requestMagicLink({ email: "old-magic@example.com" });
+    const magicToken = emailProvider.messages.at(-1)?.token ?? "";
+    await auth.storage.updateUser(magicUser.id, {
+      email: "new-magic@example.com",
+      updatedAt: new Date()
+    });
+    await expect(auth.verifyMagicLink({ token: magicToken }))
+      .rejects.toMatchObject({ code: "invalid_token" });
+
+    const verificationUser = await auth.createUser({
+      email: "old-verification@example.com"
+    });
+    await auth.requestEmailVerification({ email: "old-verification@example.com" });
+    const verificationToken = emailProvider.messages.at(-1)?.token ?? "";
+    await auth.storage.updateUser(verificationUser.id, {
+      email: "new-verification@example.com",
+      updatedAt: new Date()
+    });
+    await expect(auth.verifyEmail({ token: verificationToken }))
+      .rejects.toMatchObject({ code: "invalid_token" });
+
+    const resetUser = await auth.createUser({
+      email: "old-reset@example.com",
+      password: "correct-horse"
+    });
+    await auth.requestPasswordReset({ email: "old-reset@example.com" });
+    const resetToken = emailProvider.messages.at(-1)?.token ?? "";
+    await auth.storage.updateUser(resetUser.id, {
+      email: "new-reset@example.com",
+      updatedAt: new Date()
+    });
+    await expect(auth.resetPassword({
+      token: resetToken,
+      newPassword: "new-correct-horse"
+    })).rejects.toMatchObject({ code: "invalid_token" });
+  });
+
   it("returns generic password-reset responses for unknown users", async () => {
     const { auth, emailProvider } = createHarness();
 
     await expect(
       auth.requestPasswordReset({ email: "missing-reset@example.com" })
-    ).resolves.toEqual({ sent: true, expiresAt: null });
+    ).resolves.toMatchObject({ sent: true, expiresAt: expect.any(Date) });
     expect(emailProvider.messages).toHaveLength(0);
   });
 
-  it("rejects expired password reset tokens", async () => {
-    const { auth, emailProvider } = createHarness({
-      tokenTtlMs: { password_reset: -1 }
+  it("returns indistinguishable password-reset delivery shapes for known and unknown users", async () => {
+    const { auth } = createHarness({ exposeRawTokens: false });
+    await auth.signUpEmailPassword({
+      email: "known-reset@example.com",
+      password: "correct-horse"
     });
+
+    const [known, unknown] = await Promise.all([
+      auth.requestPasswordReset({ email: "known-reset@example.com" }),
+      auth.requestPasswordReset({ email: "unknown-reset@example.com" })
+    ]);
+
+    expect(Object.keys(unknown).sort()).toEqual(Object.keys(known).sort());
+    expect(known).toMatchObject({ sent: true, expiresAt: expect.any(Date) });
+    expect(unknown).toMatchObject({ sent: true, expiresAt: expect.any(Date) });
+  });
+
+  it("rejects expired password reset tokens", async () => {
+    const { auth, emailProvider, storage } = createHarness();
     await auth.signUpEmailPassword({
       email: "expired-reset@example.com",
       password: "correct-horse"
     });
     await auth.requestPasswordReset({ email: "expired-reset@example.com" });
+    const rawToken = emailProvider.messages.at(-1)?.token ?? "";
+    const token = await storage.getTokenByHash(hashSecret(rawToken), "password_reset");
+    if (!token) throw new Error("Expected stored password-reset token");
+    await storage.updateToken(token.id, { expiresAt: new Date(Date.now() - 1) });
 
     await expect(
       auth.resetPassword({
-        token: emailProvider.messages.at(-1)?.token ?? "",
+        token: rawToken,
         newPassword: "new-password"
       })
     ).rejects.toMatchObject({ code: "expired_token" });
@@ -552,6 +721,84 @@ describe("OwnAuth security regressions", () => {
     expect(result.sessionToken).toBeNull();
   });
 
+  it("binds verification-only SMS requests to a real target user", async () => {
+    const { auth, smsProvider } = createHarness();
+
+    await expect(auth.requestSmsOtp({
+      phone: "+15551230003",
+      purpose: "phone_verification"
+    })).rejects.toMatchObject({ code: "validation_error" });
+    await expect(auth.requestSmsOtp({
+      phone: "+15551230003",
+      userId: "usr_missing",
+      purpose: "phone_verification"
+    })).rejects.toMatchObject({ code: "user_not_found" });
+    await expect(auth.requestSmsOtp({
+      phone: "+15551230003",
+      userId: "usr_arbitrary",
+      purpose: "phone_login"
+    })).rejects.toMatchObject({ code: "validation_error" });
+
+    expect(smsProvider.messages).toHaveLength(0);
+  });
+
+  it("rejects unsupported SMS purposes in direct JavaScript calls", async () => {
+    const { auth, smsProvider } = createHarness();
+    const invalidPurpose = "unsupported" as "phone_login";
+
+    await expect(auth.requestSmsOtp({
+      phone: "+15551230004",
+      purpose: invalidPurpose
+    })).rejects.toMatchObject({ code: "validation_error" });
+    await expect(auth.verifySmsOtp({
+      phone: "+15551230004",
+      code: "123456",
+      purpose: invalidPurpose
+    })).rejects.toMatchObject({ code: "validation_error" });
+
+    expect(smsProvider.messages).toHaveLength(0);
+  });
+
+  it("does not let a stale phone-login code restore an old phone number", async () => {
+    const { auth, smsProvider } = createHarness();
+    const user = await auth.createUser({ phone: "+15551230005" });
+    await auth.requestSmsOtp({ phone: "+15551230005" });
+    const code = smsProvider.messages.at(-1)?.code ?? "";
+    await auth.storage.updateUser(user.id, {
+      phone: "+15551230006",
+      updatedAt: new Date()
+    });
+
+    await expect(auth.verifySmsOtp({
+      phone: "+15551230005",
+      code
+    })).rejects.toMatchObject({ code: "invalid_otp" });
+    await expect(auth.storage.getUserById(user.id)).resolves.toMatchObject({
+      phone: "+15551230006"
+    });
+  });
+
+  it.each([
+    "",
+    "15551234567",
+    "+0123456789",
+    "++15551234567",
+    "+1555123456789012"
+  ])("rejects malformed phone input before storage or delivery: %s", async (phone) => {
+    const { auth, smsProvider } = createHarness();
+
+    await expect(auth.createUser({ phone })).rejects.toMatchObject({
+      code: "validation_error"
+    });
+    await expect(auth.requestSmsOtp({ phone })).rejects.toMatchObject({
+      code: "validation_error"
+    });
+    await expect(auth.verifySmsOtp({ phone, code: "123456" })).rejects.toMatchObject({
+      code: "validation_error"
+    });
+    expect(smsProvider.messages).toHaveLength(0);
+  });
+
   it("rejects malformed, tampered, expired, and revoked API keys", async () => {
     const { auth, owner, organisation } = await createOwnerWithOrg();
     const created = await auth.createApiKey({
@@ -631,6 +878,54 @@ describe("OwnAuth security regressions", () => {
 
     expect(verified.apiKey.lastUsedAt).toBeInstanceOf(Date);
     expect(verified.organisation?.id).toBe(organisation.id);
+  });
+
+  it("fails API-key verification when revocation wins the last-used update race", async () => {
+    const storage = new RevokeApiKeyOnUseStorage();
+    const auth = createOwnAuth({
+      storage,
+      tokenPepper: "api-key-revocation-race"
+    });
+    const signup = await auth.signUpEmailPassword({
+      email: "api-key-race@example.com",
+      password: "correct-horse"
+    });
+    const created = await auth.createApiKey({
+      name: "Racing key",
+      actorUserId: signup.user.id
+    });
+    storage.revokeOnNextUse();
+
+    await expect(auth.verifyApiKey(created.rawKey)).rejects.toMatchObject({
+      code: "api_key_revoked"
+    });
+    await expect(storage.listAuditEvents({ apiKeyId: created.apiKey.id })).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ eventType: "api_key.used" })])
+    );
+  });
+
+  it("fails API-key verification when its owner is disabled during use", async () => {
+    const storage = new DisableApiKeyOwnerOnUseStorage();
+    const auth = createOwnAuth({
+      storage,
+      tokenPepper: "api-key-owner-race"
+    });
+    const signup = await auth.signUpEmailPassword({
+      email: "api-key-owner-race@example.com",
+      password: "correct-horse"
+    });
+    const created = await auth.createApiKey({
+      name: "Racing owner key",
+      actorUserId: signup.user.id
+    });
+    storage.disableOwnerOnNextUse(signup.user.id);
+
+    await expect(auth.verifyApiKey(created.rawKey)).rejects.toMatchObject({
+      code: "api_key_revoked"
+    });
+    await expect(storage.listAuditEvents({ apiKeyId: created.apiKey.id })).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ eventType: "api_key.used" })])
+    );
   });
 
   it.each(["missing", "disabled"] as const)(
@@ -1122,3 +1417,71 @@ describe("OwnAuth security regressions", () => {
     );
   });
 });
+
+class RevokeApiKeyOnUseStorage extends InMemoryAuthStorage {
+  private shouldRevokeOnUse = false;
+
+  revokeOnNextUse(): void {
+    this.shouldRevokeOnUse = true;
+  }
+
+  override async updateApiKey(
+    id: string,
+    patch: Partial<ApiKey>
+  ): Promise<ApiKey | null> {
+    if (this.shouldRevokeOnUse && patch.lastUsedAt) {
+      this.shouldRevokeOnUse = false;
+      await super.updateApiKey(id, {
+        status: "revoked",
+        revokedAt: new Date(),
+        revokedBy: null
+      });
+    }
+    return super.updateApiKey(id, patch);
+  }
+}
+
+class DisableApiKeyOwnerOnUseStorage extends InMemoryAuthStorage {
+  private userId: string | null = null;
+
+  disableOwnerOnNextUse(userId: string): void {
+    this.userId = userId;
+  }
+
+  override async updateApiKey(
+    id: string,
+    patch: Partial<ApiKey>
+  ): Promise<ApiKey | null> {
+    if (this.userId && patch.lastUsedAt) {
+      const userId = this.userId;
+      this.userId = null;
+      await super.updateUser(userId, {
+        disabledAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+    return super.updateApiKey(id, patch);
+  }
+}
+
+class DisableUserOnLoginStorage extends InMemoryAuthStorage {
+  private userId: string | null = null;
+
+  disableOnNextLogin(userId: string): void {
+    this.userId = userId;
+  }
+
+  override async updateUser(
+    id: string,
+    patch: Parameters<InMemoryAuthStorage["updateUser"]>[1]
+  ) {
+    if (this.userId === id && patch.lastLoginAt) {
+      this.userId = null;
+      await super.updateUser(id, {
+        disabledAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+    return super.updateUser(id, patch);
+  }
+}

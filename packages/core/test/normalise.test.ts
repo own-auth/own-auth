@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEmail, normalizePhone, slugify, isExpired } from "../src/normalise.js";
+import {
+  isExpired,
+  isValidEmailAddress,
+  isValidE164Phone,
+  normalizeEmail,
+  normalizePhone,
+  slugify
+} from "../src/normalise.js";
 
 describe("normalizeEmail", () => {
   it("lowercases and trims", () => {
@@ -9,10 +16,29 @@ describe("normalizeEmail", () => {
   it("handles already-normalized emails", () => {
     expect(normalizeEmail("user@example.com")).toBe("user@example.com");
   });
+
+  it("validates normalized email addresses", () => {
+    expect(isValidEmailAddress("user@example.com")).toBe(true);
+    expect(isValidEmailAddress("missing-at.example.com")).toBe(false);
+    expect(isValidEmailAddress("@example.com")).toBe(false);
+    expect(isValidEmailAddress("user@")).toBe(false);
+    expect(isValidEmailAddress("user @example.com")).toBe(false);
+  });
+
+  it.each([
+    "user@example@com",
+    ".user@example.com",
+    "user.@example.com",
+    "user..name@example.com",
+    "user@example..com",
+    "user\u0000@example.com"
+  ])("rejects structurally invalid email address %j", (email) => {
+    expect(isValidEmailAddress(email)).toBe(false);
+  });
 });
 
 describe("normalizePhone", () => {
-  it("strips non-digit non-plus characters", () => {
+  it("strips common phone-number formatting", () => {
     expect(normalizePhone("+1 (555) 123-4567")).toBe("+15551234567");
   });
 
@@ -22,6 +48,20 @@ describe("normalizePhone", () => {
 
   it("strips dots and spaces", () => {
     expect(normalizePhone("+1.555.123.4567")).toBe("+15551234567");
+  });
+
+  it("does not hide unsupported characters from validation", () => {
+    const normalized = normalizePhone("call +1 (555) 123-4567");
+
+    expect(normalized).toBe("call+15551234567");
+    expect(isValidE164Phone(normalized)).toBe(false);
+  });
+
+  it("validates normalized E.164 numbers", () => {
+    expect(isValidE164Phone("+15551234567")).toBe(true);
+    expect(isValidE164Phone("15551234567")).toBe(false);
+    expect(isValidE164Phone("+0123456789")).toBe(false);
+    expect(isValidE164Phone("++15551234567")).toBe(false);
   });
 });
 

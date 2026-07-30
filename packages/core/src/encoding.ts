@@ -27,5 +27,17 @@ export function encodeOAuthBasicCredentials(
   identifier: string,
   secret: string
 ): string {
-  return `Basic ${btoa(`${encodeURIComponent(identifier)}:${encodeURIComponent(secret)}`)}`;
+  return `Basic ${btoa(
+    `${encodeOAuthFormComponent(identifier)}:${encodeOAuthFormComponent(secret)}`
+  )}`;
+}
+
+export function encodeOAuthFormComponent(value: string): string {
+  return new URLSearchParams([["value", value]])
+    .toString()
+    .slice("value=".length);
+}
+
+export function decodeOAuthFormComponent(value: string): string {
+  return decodeURIComponent(value.replace(/\+/g, " "));
 }

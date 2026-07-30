@@ -63,6 +63,63 @@ describeWithDatabase("Postgres concurrency integration", () => {
     });
   }
 
+  it("activates only one TOTP factor without leaking a unique-constraint error", async () => {
+    const [first, second] = await database.connectPair();
+    const storage = [
+      new PostgresAuthStorage(first),
+      new PostgresAuthStorage(second)
+    ] as const;
+    const id = crypto.randomUUID();
+    const userId = `usr_totp_${id}`;
+    const now = new Date();
+    const factors = [0, 1].map((index) => ({
+      id: `mfa_${index}_${id}`,
+      userId,
+      status: "pending" as const,
+      ciphertext: `ciphertext_${index}`,
+      nonce: `nonce_${index}`,
+      encryptionKeyId: "test",
+      lastUsedTimestep: null,
+      createdAt: now,
+      updatedAt: now,
+      disabledAt: null
+    }));
+
+    try {
+      await storage[0].createUser({
+        id: userId,
+        email: `totp-race-${id}@example.com`,
+        emailVerifiedAt: now,
+        phone: null,
+        phoneVerifiedAt: null,
+        passwordHash: null,
+        name: null,
+        imageUrl: null,
+        disabledAt: null,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null
+      });
+      await Promise.all(factors.map((factor, index) =>
+        storage[index as 0 | 1].createTotpFactor(factor)
+      ));
+
+      const activated = await Promise.all(factors.map((factor, index) =>
+        storage[index as 0 | 1].activateTotpFactor(factor.id, 1, new Date())
+      ));
+
+      expect(activated.filter(Boolean)).toHaveLength(1);
+      await expect(storage[0].getActiveTotpFactorByUserId(userId)).resolves.toMatchObject({
+        status: "active",
+        userId
+      });
+    } finally {
+      first.release();
+      second.release();
+    }
+  });
+
   it("revokes the refresh-token winner when the original token is reused concurrently", async () => {
     const [first, second] = await database.connectPair();
     const storage = [

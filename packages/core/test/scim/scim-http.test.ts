@@ -165,6 +165,22 @@ describe("SCIM HTTP contract", () => {
     expect((await scimRequest(harness.handler, replacement.rawToken, "/Users")).status).toBe(403);
   });
 
+  it("rejects a SCIM token revoked while its usage timestamp is updated", async () => {
+    const harness = await createHarness();
+    const storage = harness.storage.scimStorage;
+    const updateToken = storage.updateToken.bind(storage);
+    let revokeOnUse = true;
+    storage.updateToken = async (id, patch) => {
+      if (revokeOnUse && patch.lastUsedAt) {
+        revokeOnUse = false;
+        await updateToken(id, { revokedAt: new Date() });
+      }
+      return updateToken(id, patch);
+    };
+
+    expect((await harness.request("/Users")).status).toBe(401);
+  });
+
   it("serves discovery resources and enforces the request body limit", async () => {
     const harness = await createHarness({ maxRequestBodyBytes: 128 });
     for (const path of [

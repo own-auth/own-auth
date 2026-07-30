@@ -300,7 +300,7 @@ export const auth = createOwnAuth({
 
 ## Providers
 
-Each provider is a single `send` function. Use any email or SMS service you want. Both are optional. Without one configured, tokens log to the console for development.
+Each provider is a single `send` function. Use any email or SMS service you want. Both are optional in development, where delivery events are logged without exposing tokens or codes. Production delivery fails until the relevant provider is configured.
 
 ### Email
 
@@ -682,7 +682,7 @@ createOwnAuth({
   // URL the app handles for auth links
   baseUrl: appLink,
 
-  // Providers (default: log to console)
+  // Providers (default: development-only console events)
   emailProvider,
   smsProvider,
 

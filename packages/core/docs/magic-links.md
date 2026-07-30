@@ -14,7 +14,7 @@ This generates a single-use token, hashes it, stores the hash, and sends an emai
 
 By default, Own Auth also sends a link when the email does not belong to an existing user. The user is created only after the link is verified. Set `allowMagicLinkSignup: false` to allow existing users only.
 
-When new-user signup is disabled, an unknown email returns successfully without sending an email. The internal result uses `expiresAt: null`, so backend endpoints should return their own fixed success response instead of exposing the result directly.
+When new-user signup is disabled, an unknown email returns the same public result shape without creating a token or sending an email.
 
 ### Errors
 

@@ -82,6 +82,38 @@ describe("createOwnAuthHandler", () => {
     expect(body.session?.user.email).toBe("bearer@example.com");
   });
 
+  it("rejects Bearer headers with trailing values", async () => {
+    const { auth, handler } = createHarness();
+    const signup = await auth.signUpEmailPassword({
+      email: "malformed-bearer@example.com",
+      password: "correct-horse"
+    });
+
+    const response = await handler(new Request("http://localhost/api/auth/session", {
+      headers: {
+        authorization: `Bearer ${signup.sessionToken} unexpected`
+      }
+    }));
+
+    await expect(response.json()).resolves.toEqual({ session: null });
+  });
+
+  it("fails closed when the session cookie appears more than once", async () => {
+    const { auth, handler } = createHarness();
+    const signup = await auth.signUpEmailPassword({
+      email: "duplicate-cookie@example.com",
+      password: "correct-horse"
+    });
+
+    const response = await handler(new Request("http://localhost/api/auth/session", {
+      headers: {
+        cookie: `own_auth_session=untrusted; own_auth_session=${signup.sessionToken}`
+      }
+    }));
+
+    await expect(response.json()).resolves.toEqual({ session: null });
+  });
+
   it("rejects cross-origin mutation requests", async () => {
     const { handler } = createHarness();
     const response = await handler(jsonRequest(

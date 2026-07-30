@@ -183,6 +183,12 @@ export class D1IdentityStorage extends D1StorageBase {
       `update own_auth_mfa_factors
        set status = 'active', last_used_timestep = ?2, updated_at = ?3
        where id = ?1 and status = 'pending'
+         and not exists (
+           select 1
+           from own_auth_mfa_factors active
+           where active.user_id = own_auth_mfa_factors.user_id
+             and active.status = 'active'
+         )
        returning ${totpFactorReturning}`,
       [id, timestep, activatedAt.getTime()]
     ).first<DatabaseRow>();

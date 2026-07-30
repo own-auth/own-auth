@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- Custom `AuthStorage` adapters must implement atomic invitation acceptance, invitation revocation, and authentication-method removal.
+
+### Security
+
+- Invitation acceptance now consumes the invitation token, activates the membership, and records its audit and webhook event in one atomic storage operation. Concurrent acceptance or revocation has one terminal winner.
+- External-account and passkey removal now share one atomic cross-kind guard, so concurrent requests cannot remove a user's final usable authentication method.
+- Migration `017_atomic_auth_operations` adds the operation markers and authentication-method version used by the Postgres and Cloudflare D1 implementations.
+
 ## 0.3.6
 
 ### Added

@@ -53,6 +53,7 @@ export interface OwnAuthOptions<
   };
   password?: {
     minLength?: number;
+    maxLength?: number;
   };
   encryption?: EncryptionKeyRingOptions;
   oauth?: OAuthOptions;

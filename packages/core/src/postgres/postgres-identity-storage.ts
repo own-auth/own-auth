@@ -31,6 +31,7 @@ import {
   webAuthnChallengeReturning
 } from "../database-identity-schema.js";
 import { PostgresStorageBase } from "./postgres-storage-base.js";
+import { isPostgresUniqueConstraint } from "./postgres-errors.js";
 import { expectOne } from "./postgres-row.js";
 import type { Row } from "./postgres-types.js";
 
@@ -178,14 +179,32 @@ export class PostgresIdentityStorage extends PostgresStorageBase {
     timestep: number,
     activatedAt: Date
   ): Promise<TotpFactor | null> {
-    const result = await this.db.query<Row>(
-      `update own_auth_mfa_factors
-       set status = 'active', last_used_timestep = $2, updated_at = $3
-       where id = $1 and status = 'pending'
-       returning ${totpFactorReturning}`,
-      [id, timestep, activatedAt]
-    );
-    return result.rows[0] ? mapTotpFactor(result.rows[0]) : null;
+    try {
+      const result = await this.db.query<Row>(
+        `update own_auth_mfa_factors
+         set status = 'active', last_used_timestep = $2, updated_at = $3
+         where id = $1 and status = 'pending'
+           and not exists (
+             select 1
+             from own_auth_mfa_factors active
+             where active.user_id = own_auth_mfa_factors.user_id
+               and active.status = 'active'
+           )
+         returning ${totpFactorReturning}`,
+        [id, timestep, activatedAt]
+      );
+      return result.rows[0] ? mapTotpFactor(result.rows[0]) : null;
+    } catch (error) {
+      if (
+        isPostgresUniqueConstraint(
+          error,
+          "own_auth_mfa_factors_one_active_totp_idx"
+        )
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async useTotpTimestep(

@@ -118,6 +118,10 @@ Organisation reads and mutations verify the actor's active membership and requir
 
 Pass `actorUserId` from the authenticated session. Own Auth performs the organisation permission check inside each operation, so a separate `requirePermission` call is not needed first.
 
+Invitation acceptance consumes the one-time token, activates the membership, and records the audit and webhook event in one atomic storage operation. Acceptance and revocation compete for the same pending invitation, so concurrent requests produce one terminal result without partial membership or event state.
+
+External accounts and passkeys use one atomic removal guard across both method types. Concurrent removal requests cannot delete the final usable authentication method from an account.
+
 ## Rate limiting
 
 Sensitive authentication entry points have built-in rate-limit buckets. OAuth, One Tap, SAML, and failed SCIM authentication limits use request IP context when available. Authenticated SCIM traffic is limited per connection. MFA challenges and SMS codes also enforce per-credential attempt limits. See [Rate limiting](/docs/rate-limiting) for the full table.

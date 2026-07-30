@@ -7,6 +7,7 @@ import type {
   AuthorizationTokenType,
   TokenEndpointAuthMethod
 } from "./authorization-server-types.js";
+import { decodeOAuthFormComponent } from "./encoding.js";
 import { readLimitedBody } from "./http/request-input.js";
 
 export function parseAuthorizationRequest(
@@ -151,8 +152,8 @@ function basicCredentials(value: string | null): {
     const separator = decoded.indexOf(":");
     if (separator < 1) throw invalidAuthorizationClient();
     return {
-      clientId: decodeURIComponent(decoded.slice(0, separator)),
-      clientSecret: decodeURIComponent(decoded.slice(separator + 1))
+      clientId: decodeOAuthFormComponent(decoded.slice(0, separator)),
+      clientSecret: decodeOAuthFormComponent(decoded.slice(separator + 1))
     };
   } catch (error) {
     if (error instanceof AuthorizationProtocolError) throw error;

@@ -45,6 +45,9 @@ export async function changeMemberRole(
     role: input.role,
     updatedAt: new Date()
   });
+  if (!updatedMember) {
+    throw new AuthError("member_not_found", "Member not found", 404);
+  }
 
   await audit(ctx, {
     eventType: "member.role_changed",
@@ -59,7 +62,7 @@ export async function changeMemberRole(
     }
   });
 
-  return updatedMember ?? member;
+  return updatedMember;
 }
 
 export async function removeMember(
@@ -91,6 +94,9 @@ export async function removeMember(
     removedAt: now,
     updatedAt: now
   });
+  if (!updatedMember) {
+    throw new AuthError("member_not_found", "Member not found", 404);
+  }
 
   await audit(ctx, {
     eventType: "member.removed",
@@ -105,7 +111,7 @@ export async function removeMember(
     }
   });
 
-  return updatedMember ?? member;
+  return updatedMember;
 }
 
 export async function listMembers(
@@ -165,10 +171,13 @@ async function transferOwnership(
     return null;
   }
 
-  await ctx.storage.updateOrganisation(organisation.id, {
+  const updated = await ctx.storage.updateOrganisation(organisation.id, {
     ownerUserId: replacement.userId,
     updatedAt: new Date()
   });
+  if (!updated) {
+    throw new AuthError("organisation_not_found", "Organisation not found", 404);
+  }
   return replacement.userId;
 }
 

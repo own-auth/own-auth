@@ -12,6 +12,7 @@ import {
   findStored,
   updateStoredEntity
 } from "./memory-storage-helpers.js";
+import { createIdentityConflictError } from "./errors.js";
 import type { Account } from "./types.js";
 
 export class MemoryIdentityStorage {
@@ -21,10 +22,13 @@ export class MemoryIdentityStorage {
   private readonly totpFactors = new Map<string, TotpFactor>();
   private readonly recoveryCodes = new Map<string, RecoveryCode>();
   private readonly mfaChallenges = new Map<string, MfaChallenge>();
-  private readonly passkeys = new Map<string, PasskeyCredential>();
+  protected readonly passkeys = new Map<string, PasskeyCredential>();
   private readonly webAuthnChallenges = new Map<string, WebAuthnChallenge>();
 
   async createAccount(account: Account): Promise<Account> {
+    if (this.hasProviderAccount(account.provider, account.providerAccountId)) {
+      throw createIdentityConflictError("providerAccount");
+    }
     this.accounts.set(account.id, cloneStored(account));
     return cloneStored(account);
   }
@@ -47,6 +51,10 @@ export class MemoryIdentityStorage {
   }
 
   async deleteAccount(id: string): Promise<boolean> {
+    return this.deleteStoredAccount(id);
+  }
+
+  protected deleteStoredAccount(id: string): boolean {
     if (!this.accounts.delete(id)) {
       return false;
     }
@@ -56,6 +64,14 @@ export class MemoryIdentityStorage {
       }
     }
     return true;
+  }
+
+  protected hasProviderAccount(provider: string, providerAccountId: string): boolean {
+    return [...this.accounts.values()].some(
+      (account) =>
+        account.provider === provider &&
+        account.providerAccountId === providerAccountId
+    );
   }
 
   async createOAuthTransaction(transaction: OAuthTransaction): Promise<OAuthTransaction> {
@@ -143,6 +159,14 @@ export class MemoryIdentityStorage {
   ): Promise<TotpFactor | null> {
     const factor = this.totpFactors.get(id);
     if (!factor || factor.status !== "pending") {
+      return null;
+    }
+    const activeFactor = [...this.totpFactors.values()].some(
+      (candidate) =>
+        candidate.userId === factor.userId &&
+        candidate.status === "active"
+    );
+    if (activeFactor) {
       return null;
     }
     return updateStoredEntity(this.totpFactors, id, {
@@ -234,6 +258,13 @@ export class MemoryIdentityStorage {
   }
 
   async createPasskeyCredential(credential: PasskeyCredential): Promise<PasskeyCredential> {
+    if (
+      [...this.passkeys.values()].some(
+        (candidate) => candidate.credentialId === credential.credentialId
+      )
+    ) {
+      throw new Error("Passkey credential already exists");
+    }
     this.passkeys.set(credential.id, cloneStored(credential));
     return cloneStored(credential);
   }
@@ -283,6 +314,10 @@ export class MemoryIdentityStorage {
   }
 
   async deletePasskeyCredential(id: string): Promise<boolean> {
+    return this.deleteStoredPasskey(id);
+  }
+
+  protected deleteStoredPasskey(id: string): boolean {
     return this.passkeys.delete(id);
   }
 

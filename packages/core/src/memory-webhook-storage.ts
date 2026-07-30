@@ -27,6 +27,14 @@ export class MemoryWebhookStorage implements WebhookStorage {
     webhookEvent: StoredWebhookEvent,
     deliveries: readonly WebhookDeliverySeed[]
   ): Promise<void> {
+    this.recordAuditEventWithWebhooksSync(auditEvent, webhookEvent, deliveries);
+  }
+
+  recordAuditEventWithWebhooksSync(
+    auditEvent: AuditEvent,
+    webhookEvent: StoredWebhookEvent,
+    deliveries: readonly WebhookDeliverySeed[]
+  ): void {
     if (this.auditEvents.has(auditEvent.id) || this.events.has(webhookEvent.id)) {
       throw new Error("Webhook event already exists");
     }

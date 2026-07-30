@@ -12,11 +12,12 @@ export {
   cloneMetadata,
   createAuditEvent,
   createSession,
-  hasRemainingAuthenticationMethod,
   markUserLoggedIn,
   rateLimit,
   requestContextFrom,
   requireActiveUser,
+  requireValidEmail,
+  requireValidPhone,
   userFor,
   uniqueOrganisationSlug
 } from "./auth-engine-helpers.js";

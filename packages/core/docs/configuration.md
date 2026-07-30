@@ -127,7 +127,7 @@ Storage, rate limiting, email, and SMS can be replaced with adapters through `st
 
 A secret string used when hashing sessions, auth links, SMS codes, API keys, OAuth client secrets, authorization codes, and OAuth access and refresh tokens before storing them. If this option is omitted, Own Auth reads `OWN_AUTH_TOKEN_PEPPER` from the environment.
 
-It is required in production. Generate it once, keep it secret, and do not change it unless you intend to invalidate existing sessions, links, codes, API keys, OAuth client secrets, and authorization-server tokens.
+It is required in production and must contain at least 32 bytes. Generate it once, keep it secret, and do not change it unless you intend to invalidate existing sessions, links, codes, API keys, OAuth client secrets, and authorization-server tokens.
 
 ### `baseUrl`
 
@@ -147,6 +147,7 @@ It is required in production. Generate it once, keep it secret, and do not chang
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `minLength` | `number` | `8` | Minimum password length. |
+| `maxLength` | `number` | `128` | Maximum password length accepted for new passwords. |
 
 New passwords are hashed with Argon2id. Existing scrypt hashes remain valid and are upgraded to Argon2id after a successful sign in. The hashing algorithm is not configurable.
 
@@ -236,7 +237,7 @@ Configure `emailProvider` to send auth emails using any email service. This is n
 |---|---|---|---|
 | `emailProvider` | `EmailProvider` | `ConsoleEmailProvider` | Sends magic links, verification links, password reset links, and invitations. |
 
-The console provider is for development and does not send emails. Use [Own Auth Delivery](/docs/delivery/setup) for managed auth email delivery.
+The console provider is for development and does not send emails. In production, sending an auth email without a configured provider fails instead of silently dropping the message. Use [Own Auth Delivery](/docs/delivery/setup) for managed auth email delivery.
 
 ### Managed delivery
 

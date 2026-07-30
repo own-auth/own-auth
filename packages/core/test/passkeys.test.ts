@@ -220,6 +220,43 @@ describe("passkeys", () => {
     })).rejects.toMatchObject({ code: "passkey_invalid" });
   });
 
+  it("does not let one WebAuthn credential belong to multiple users", async () => {
+    const auth = createPasskeyAuth();
+    const first = requireCompleteSignIn(await auth.signUpEmailPassword({
+      email: "first-passkey-owner@example.com",
+      password: "correct-horse"
+    }));
+    await auth.beginPasskeyRegistration({ sessionToken: first.sessionToken });
+    await auth.completePasskeyRegistration({
+      sessionToken: first.sessionToken,
+      response: registrationResponse(
+        "credential-one",
+        "registration-challenge",
+        true
+      )
+    });
+
+    const second = requireCompleteSignIn(await auth.signUpEmailPassword({
+      email: "second-passkey-owner@example.com",
+      password: "correct-horse"
+    }));
+    webAuthn.registrationChallenge = "second-registration-challenge";
+    await auth.beginPasskeyRegistration({ sessionToken: second.sessionToken });
+    await expect(auth.completePasskeyRegistration({
+      sessionToken: second.sessionToken,
+      response: registrationResponse(
+        "credential-one",
+        "second-registration-challenge",
+        true
+      )
+    })).rejects.toMatchObject({ code: "passkey_invalid" });
+
+    await expect(auth.listPasskeys({ sessionToken: first.sessionToken }))
+      .resolves.toHaveLength(1);
+    await expect(auth.listPasskeys({ sessionToken: second.sessionToken }))
+      .resolves.toHaveLength(0);
+  });
+
   it("requires username-first authentication for non-discoverable credentials", async () => {
     const storage = new InMemoryAuthStorage();
     const auth = createPasskeyAuth(storage);
@@ -258,6 +295,34 @@ describe("passkeys", () => {
     await expect(auth.completePasskeyAuthentication({
       response: authenticationResponse("credential-hardware", "username-first-challenge")
     })).resolves.toMatchObject({ status: "complete" });
+  });
+
+  it("fails closed when a passkey is removed during zero-counter authentication", async () => {
+    const storage = new InMemoryAuthStorage();
+    const auth = createPasskeyAuth(storage);
+    const signup = requireCompleteSignIn(await auth.signUpEmailPassword({
+      email: "passkey-removal-race@example.com",
+      password: "correct-horse"
+    }));
+    await auth.beginPasskeyRegistration({ sessionToken: signup.sessionToken });
+    await auth.completePasskeyRegistration({
+      sessionToken: signup.sessionToken,
+      response: registrationResponse(
+        "credential-one",
+        "registration-challenge",
+        true
+      )
+    });
+    await auth.signOut(signup.sessionToken);
+    await auth.beginPasskeyAuthentication();
+    vi.spyOn(storage, "updatePasskeyCredential").mockResolvedValueOnce(null);
+
+    await expect(auth.completePasskeyAuthentication({
+      response: authenticationResponse(
+        "credential-one",
+        "authentication-challenge"
+      )
+    })).rejects.toMatchObject({ code: "passkey_invalid" });
   });
 
   it("lists, renames, and revokes only the current user's passkeys", async () => {

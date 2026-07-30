@@ -31,6 +31,35 @@ export function clientErrorFromResponse(body: unknown, status: number): OwnAuthC
   return new OwnAuthClientError("internal_error", "Authentication request failed", status);
 }
 
+export function clientErrorFromUnknown(error: unknown): OwnAuthClientError {
+  return error instanceof OwnAuthClientError
+    ? error
+    : new OwnAuthClientError(
+        "internal_error",
+        "Authentication request failed",
+        0
+      );
+}
+
+export async function requestJson(
+  fetchImpl: typeof globalThis.fetch,
+  input: string | URL | Request,
+  init?: RequestInit
+): Promise<{ body: unknown; response: Response }> {
+  let response: Response;
+  try {
+    response = await fetchImpl(input, init);
+  } catch (error) {
+    throw clientErrorFromUnknown(error);
+  }
+
+  const body = await readJsonResponse(response);
+  if (!response.ok) {
+    throw clientErrorFromResponse(body, response.status);
+  }
+  return { body, response };
+}
+
 function isErrorPayload(value: unknown): value is OwnAuthErrorPayload {
   if (!value || typeof value !== "object" || !("error" in value)) {
     return false;

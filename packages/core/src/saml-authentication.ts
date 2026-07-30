@@ -5,7 +5,7 @@ import { completeFirstFactor } from "./auth-engine-mfa.js";
 import {
   assertRedirectAllowed,
   audit,
-  hasRemainingAuthenticationMethod,
+  createAuditEvent,
   rateLimit,
   requireActiveUser
 } from "./auth-engine-internals.js";
@@ -30,6 +30,7 @@ import {
   requireSaml,
   requireSamlConnection
 } from "./saml-helpers.js";
+import { prepareAuthEventWrite } from "./webhook-outbox.js";
 
 const tenMinutes = 10 * 60 * 1_000;
 
@@ -149,22 +150,29 @@ export async function unlinkIdentity(
   if (!account) {
     throw new AuthError("invalid_credentials", "SAML identity not found", 404);
   }
-  if (!await hasRemainingAuthenticationMethod(ctx, user, { accountId: account.id })) {
+  const removed = await ctx.storage.removeAuthenticationMethodAtomically({
+    operationId: createId("op"),
+    userId: user.id,
+    method: { kind: "account", id: account.id },
+    event: prepareAuthEventWrite(ctx, createAuditEvent({
+      eventType: "saml.identity_unlinked",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      organisationId: connection.organisationId,
+      request: input.request,
+      metadata: { connectionId: connection.id }
+    }))
+  });
+  if (removed === "last_method") {
     throw new AuthError(
       "authentication_method_required",
       "Add another sign-in method before unlinking this SAML identity",
       409
     );
   }
-  await ctx.storage.deleteAccount(account.id);
-  await audit(ctx, {
-    eventType: "saml.identity_unlinked",
-    actorUserId: user.id,
-    targetUserId: user.id,
-    organisationId: connection.organisationId,
-    context: input.request,
-    metadata: { connectionId: connection.id }
-  });
+  if (removed === "not_found") {
+    throw new AuthError("invalid_credentials", "SAML identity not found", 404);
+  }
 }
 
 async function createAuthorizationUrl(

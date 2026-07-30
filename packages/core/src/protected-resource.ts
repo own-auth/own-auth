@@ -5,6 +5,7 @@ import {
   isDpopJwkThumbprint,
   maximumDpopProofBytes
 } from "./dpop-crypto.js";
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 
 const scopePattern = /^[\x21\x23-\x5B\x5D-\x7E]+$/;
 
@@ -99,10 +100,11 @@ export function createOwnAuthProtectedResource(
   const introspectionUrl = requiredUrl(options.introspectionUrl, "introspectionUrl");
   const resource = requiredUrl(options.resource, "resource");
   const resourceSecret = requiredSecret(options.resourceSecret);
-  const fetchImpl = options.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== "function") {
+  const resolvedFetch = resolveFetchImplementation(options.fetch);
+  if (!resolvedFetch) {
     throw configurationError("A Fetch API implementation is required");
   }
+  const fetchImpl: typeof globalThis.fetch = resolvedFetch;
 
   return {
     resource,

@@ -4,6 +4,7 @@ import {
 } from "./dpop.js";
 import { deviceAuthorizationGrantType } from "./authorization-server-device-types.js";
 import { encodeOAuthBasicCredentials } from "./encoding.js";
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 import { normalizeProtectedResourceUrl } from "./protected-resource-url.js";
 
 export type DeviceFlowClientAuthenticationMethod =
@@ -84,10 +85,11 @@ export function createDeviceFlowClient(
   );
   const tokenEndpoint = requiredHttpUrl(options.tokenEndpoint, "tokenEndpoint");
   const clientId = requiredText(options.clientId, "clientId");
-  const fetchImpl = options.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== "function") {
+  const resolvedFetch = resolveFetchImplementation(options.fetch);
+  if (!resolvedFetch) {
     throw new Error("A Fetch API implementation is required");
   }
+  const fetchImpl: typeof globalThis.fetch = resolvedFetch;
   const authenticationMethod = options.clientAuthenticationMethod ??
     (options.clientSecret ? "client_secret_basic" : "none");
   validateClientAuthentication(authenticationMethod, options.clientSecret);
@@ -160,7 +162,11 @@ export function createDeviceFlowClient(
         }
         const payload = await readJson(response);
         if (response.ok) {
-          return parseTokenResponse(payload, input.authorization.scopes);
+          return parseTokenResponse(
+            payload,
+            input.authorization.scopes,
+            options.dpopKeyPair ? "DPoP" : "Bearer"
+          );
         }
         const protocolError = stringField(payload, "error");
         if (protocolError === "authorization_pending") continue;
@@ -256,7 +262,8 @@ function parseDeviceAuthorization(
 
 function parseTokenResponse(
   payload: Record<string, unknown>,
-  requestedScopes: readonly string[]
+  requestedScopes: readonly string[],
+  expectedTokenType: "Bearer" | "DPoP"
 ): DeviceFlowTokenResponse {
   const tokenTypeValue = stringField(payload, "token_type")?.toLowerCase();
   const tokenType = tokenTypeValue === "bearer"
@@ -271,6 +278,7 @@ function parseTokenResponse(
   const idToken = stringField(payload, "id_token");
   if (
     !tokenType ||
+    tokenType !== expectedTokenType ||
     !accessToken ||
     expiresIn === null ||
     expiresIn < 0

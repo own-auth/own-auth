@@ -136,7 +136,13 @@ const ownAuthEndpointSpecs = {
       ["email", "password"]
     ),
     response: authSessionSchema,
-    errors: ["email_already_exists", "weak_password", "rate_limited", "validation_error"],
+    errors: [
+      "email_already_exists",
+      "weak_password",
+      "password_too_long",
+      "rate_limited",
+      "validation_error"
+    ],
     session: "create"
   }),
   signInEmailPassword: endpoint("POST", "/sign-in/email", "Sign in with an email and password", {
@@ -158,7 +164,13 @@ const ownAuthEndpointSpecs = {
       ["currentPassword", "newPassword"]
     ),
     response: userResponseSchema,
-    errors: ["invalid_session", "invalid_credentials", "weak_password", "rate_limited"],
+    errors: [
+      "invalid_session",
+      "invalid_credentials",
+      "weak_password",
+      "password_too_long",
+      "rate_limited"
+    ],
     session: "required"
   }),
   requestMagicLink: endpoint("POST", "/magic-link/request", "Send a magic link", {
@@ -179,11 +191,20 @@ const ownAuthEndpointSpecs = {
   }),
   resetPassword: endpoint("POST", "/password-reset/confirm", "Reset a password", {
     request: objectSchema({ token: stringSchema(), newPassword: stringSchema() }, ["token", "newPassword"]),
-    response: userResponseSchema, errors: [...tokenErrors, "weak_password"], session: "clear"
+    response: userResponseSchema,
+    errors: [...tokenErrors, "weak_password", "password_too_long"],
+    session: "clear"
   }),
   requestSmsOtp: endpoint("POST", "/sms/request", "Send an SMS one-time code", {
     request: objectSchema({ phone: stringSchema(), purpose: smsPurposeSchema }, ["phone"]),
-    response: deliverySchema, errors: deliveryErrors, session: "optional"
+    response: deliverySchema,
+    errors: [
+      ...deliveryErrors,
+      "invalid_session",
+      "disabled_user",
+      "user_not_found"
+    ],
+    session: "optional"
   }),
   verifySmsOtp: endpoint("POST", "/sms/verify", "Verify an SMS one-time code", {
     request: objectSchema(
@@ -191,7 +212,13 @@ const ownAuthEndpointSpecs = {
       ["phone", "code"]
     ),
     response: { anyOf: [signInSchema, objectSchema({ status: { const: "verified" }, user: publicAuthUserSchema }, ["status", "user"])] },
-    errors: ["invalid_otp", "otp_attempts_exceeded", "user_not_found", "rate_limited"],
+    errors: [
+      "invalid_otp",
+      "otp_attempts_exceeded",
+      "user_not_found",
+      "rate_limited",
+      "validation_error"
+    ],
     session: "optional"
   }),
   acceptInvite: endpoint("POST", "/invitations/accept", "Accept an organisation invitation", {

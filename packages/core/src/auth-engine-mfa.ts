@@ -21,6 +21,7 @@ import {
   createSession,
   hash,
   markUserLoggedIn,
+  requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { requireCurrentSession } from "./auth-engine-sessions.js";
@@ -36,9 +37,10 @@ export async function completeFirstFactor(
   method: string,
   request?: RequestContext
 ): Promise<SignInResult> {
+  const activeUser = await requireActiveUser(ctx, user.id);
   const [totp, passkeys] = await Promise.all([
-    ctx.storage.getActiveTotpFactorByUserId(user.id),
-    ctx.storage.listPasskeyCredentialsByUserId(user.id)
+    ctx.storage.getActiveTotpFactorByUserId(activeUser.id),
+    ctx.storage.listPasskeyCredentialsByUserId(activeUser.id)
   ]);
   const methods: MfaMethod[] = [];
   if (totp) {
@@ -48,9 +50,9 @@ export async function completeFirstFactor(
     methods.push("passkey");
   }
   if (methods.length === 0) {
-    const activeUser = await markUserLoggedIn(ctx, user);
-    const result = await createSession(ctx, activeUser, request, [method], "aal1");
-    await auditSignedIn(ctx, activeUser.id, method, request, "aal1");
+    const authenticatedUser = await markUserLoggedIn(ctx, activeUser);
+    const result = await createSession(ctx, authenticatedUser, request, [method], "aal1");
+    await auditSignedIn(ctx, authenticatedUser.id, method, request, "aal1");
     return result;
   }
 
@@ -59,7 +61,7 @@ export async function completeFirstFactor(
   const expiresAt = new Date(now.getTime() + ctx.mfaChallengeTtlMs);
   await ctx.storage.createMfaChallenge({
     id: createId("mfc"),
-    userId: user.id,
+    userId: activeUser.id,
     tokenHash: hash(ctx, challengeToken),
     primaryMethod: method,
     methods,

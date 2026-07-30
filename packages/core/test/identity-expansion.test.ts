@@ -125,6 +125,38 @@ describe("identity expansion", () => {
     })).toThrow("mfa.maxAttempts must be a positive integer");
   });
 
+  it("allows only one pending TOTP enrollment to become active", async () => {
+    const { auth } = identityHarness();
+    const signup = requireCompleteSignIn(await auth.signUpEmailPassword({
+      email: "totp-enrollment-race@example.com",
+      password: "correct-horse"
+    }));
+    const [first, second] = await Promise.all([
+      auth.beginTotpEnrollment({ sessionToken: signup.sessionToken }),
+      auth.beginTotpEnrollment({ sessionToken: signup.sessionToken })
+    ]);
+
+    const results = await Promise.allSettled([
+      auth.confirmTotpEnrollment({
+        sessionToken: signup.sessionToken,
+        factorId: first.factorId,
+        code: createTotpCode(first.secret)
+      }),
+      auth.confirmTotpEnrollment({
+        sessionToken: signup.sessionToken,
+        factorId: second.factorId,
+        code: createTotpCode(second.secret)
+      })
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toEqual([
+      expect.objectContaining({
+        reason: expect.objectContaining({ code: "mfa_code_invalid" })
+      })
+    ]);
+  });
+
   it("keeps every first-factor flow sessionless until MFA succeeds", async () => {
     const { auth, emailProvider, smsProvider } = identityHarness();
     const signup = requireCompleteSignIn(await auth.signUpEmailPassword({
@@ -406,7 +438,7 @@ function fakeGoogleProvider(): OAuthProviderAdapter {
     name: null,
     imageUrl: null
   };
-  return {
+  const provider: OAuthProviderAdapter = {
     provider: "google",
     redirectUri: "https://api.example.com/api/auth/oauth/google/callback",
     offlineAccess: false,
@@ -419,13 +451,15 @@ function fakeGoogleProvider(): OAuthProviderAdapter {
       return { identity, refreshToken: null, scopes: [] };
     },
     async verifyCredential() {
+      if (this !== provider) throw new Error("OAuth provider receiver was not preserved");
       return identity;
     }
   };
+  return provider;
 }
 
 function refreshableGoogleProvider(onRevoke: (token: string) => void): OAuthProviderAdapter {
-  return {
+  const provider: OAuthProviderAdapter = {
     provider: "google",
     redirectUri: "https://api.example.com/api/auth/oauth/google/callback",
     offlineAccess: true,
@@ -449,6 +483,7 @@ function refreshableGoogleProvider(onRevoke: (token: string) => void): OAuthProv
       };
     },
     async refresh() {
+      if (this !== provider) throw new Error("OAuth provider receiver was not preserved");
       return {
         accessToken: "access-two",
         refreshToken: "refresh-two",
@@ -456,9 +491,11 @@ function refreshableGoogleProvider(onRevoke: (token: string) => void): OAuthProv
       };
     },
     async revoke(token) {
+      if (this !== provider) throw new Error("OAuth provider receiver was not preserved");
       onRevoke(token);
     }
   };
+  return provider;
 }
 
 class EmailCreationRaceStorage extends InMemoryAuthStorage {

@@ -1,6 +1,7 @@
 import * as oauth from "oauth4webapi";
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
 import { AuthError } from "./errors.js";
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 import { verifyRs256Jwt } from "./oauth-jwt.js";
 import type {
   AppleOAuthOptions,
@@ -45,8 +46,12 @@ abstract class OAuthAdapterBase implements OAuthProviderAdapter {
   abstract readonly offlineAccess: boolean;
   protected readonly fetchImpl: typeof globalThis.fetch;
 
-  constructor(fetchImpl: typeof globalThis.fetch) {
-    this.fetchImpl = fetchImpl;
+  constructor(fetchImpl?: typeof globalThis.fetch) {
+    const resolved = resolveFetchImplementation(fetchImpl);
+    if (!resolved) {
+      throw new Error("OAuth providers require a Fetch API implementation");
+    }
+    this.fetchImpl = resolved;
   }
 
   abstract createAuthorizationUrl(input: OAuthAuthorizationRequest): Promise<URL>;
@@ -69,7 +74,7 @@ export class GoogleOAuthAdapter extends OAuthAdapterBase {
   private readonly options: GoogleOAuthOptions;
   private readonly client: oauth.Client;
 
-  constructor(options: GoogleOAuthOptions, fetchImpl = globalThis.fetch) {
+  constructor(options: GoogleOAuthOptions, fetchImpl?: typeof globalThis.fetch) {
     super(fetchImpl);
     this.options = options;
     this.redirectUri = options.redirectUri;
@@ -138,7 +143,7 @@ export class GitHubOAuthAdapter extends OAuthAdapterBase {
   private readonly options: GitHubOAuthOptions;
   private readonly client: oauth.Client;
 
-  constructor(options: GitHubOAuthOptions, fetchImpl = globalThis.fetch) {
+  constructor(options: GitHubOAuthOptions, fetchImpl?: typeof globalThis.fetch) {
     super(fetchImpl);
     this.options = options;
     this.redirectUri = options.redirectUri;
@@ -195,7 +200,7 @@ export class AppleOAuthAdapter extends OAuthAdapterBase {
   private readonly options: AppleOAuthOptions;
   private readonly client: oauth.Client;
 
-  constructor(options: AppleOAuthOptions, fetchImpl = globalThis.fetch) {
+  constructor(options: AppleOAuthOptions, fetchImpl?: typeof globalThis.fetch) {
     super(fetchImpl);
     this.options = options;
     this.redirectUri = options.redirectUri;

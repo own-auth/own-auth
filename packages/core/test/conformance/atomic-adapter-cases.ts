@@ -1,5 +1,6 @@
 import type { RateLimitStore } from "../../src/rate-limit.js";
 import type { AuthStorage } from "../../src/storage.js";
+import type { AtomicAuthEventWrite } from "../../src/auth-storage-atomic.js";
 import {
   assertConformanceArrayEqual,
   assertConformanceEqual,
@@ -348,15 +349,387 @@ export const atomicAdapterCases: readonly AtomicAdapterCase[] = [
         "stored passkey counter"
       );
     }
+  },
+  {
+    name: "accepts an invitation and records its effects atomically",
+    async run({ storage }) {
+      const now = new Date();
+      const ownerId = await createAtomicUser(storage[0]);
+      const invitedEmail = `${uniqueValue("invited")}@example.com`;
+      const invitedUserId = await createAtomicUser(storage[0], {
+        email: invitedEmail
+      });
+      const organisationId = uniqueValue("org");
+      const tokenId = uniqueValue("tok");
+      const tokenHash = uniqueValue("invite");
+      const invitationId = uniqueValue("inv");
+      await storage[0].createOrganisation({
+        id: organisationId,
+        name: "Atomic invitation",
+        slug: uniqueValue("atomic-invitation"),
+        ownerUserId: ownerId,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        disabledAt: null
+      });
+      await storage[0].createToken({
+        id: tokenId,
+        tokenHash,
+        type: "organisation_invite",
+        userId: null,
+        email: invitedEmail,
+        phone: null,
+        organisationId,
+        expiresAt: new Date(now.getTime() + 60_000),
+        usedAt: null,
+        createdAt: now
+      });
+      await storage[0].createInvitation({
+        id: invitationId,
+        tokenId,
+        organisationId,
+        email: invitedEmail,
+        phone: null,
+        role: "member",
+        invitedByUserId: ownerId,
+        status: "pending",
+        expiresAt: new Date(now.getTime() + 60_000),
+        acceptedAt: null,
+        revokedAt: null,
+        createdAt: now
+      });
+
+      assertSingleValueWinner(await Promise.all([
+        storage[0].acceptInvitationAtomically({
+          operationId: uniqueValue("op"),
+          tokenId,
+          tokenHash,
+          invitationId,
+          userId: invitedUserId,
+          memberId: uniqueValue("mem"),
+          acceptedAt: now,
+          event: atomicEvent(uniqueValue("evt"), "invite.accepted", invitedUserId, organisationId)
+        }),
+        storage[1].acceptInvitationAtomically({
+          operationId: uniqueValue("op"),
+          tokenId,
+          tokenHash,
+          invitationId,
+          userId: invitedUserId,
+          memberId: uniqueValue("mem"),
+          acceptedAt: now,
+          event: atomicEvent(uniqueValue("evt"), "invite.accepted", invitedUserId, organisationId)
+        })
+      ]), "invitation acceptance");
+
+      assertConformanceEqual(
+        (await storage[0].getInvitationById(invitationId))?.status,
+        "accepted",
+        "invitation status"
+      );
+      assertConformanceEqual(
+        (await storage[0].getTokenByHash(tokenHash, "organisation_invite"))?.usedAt
+          instanceof Date,
+        true,
+        "invitation token consumption"
+      );
+      assertConformanceEqual(
+        (await storage[0].listOrganisationMembers(organisationId))
+          .filter((member) => member.userId === invitedUserId).length,
+        1,
+        "invitation member count"
+      );
+      assertConformanceEqual(
+        (await storage[0].listAuditEvents({ organisationId }))
+          .filter((event) => event.eventType === "invite.accepted").length,
+        1,
+        "invitation audit count"
+      );
+    }
+  },
+  {
+    name: "rolls back invitation acceptance when event persistence fails",
+    async run({ storage }) {
+      const now = new Date();
+      const ownerId = await createAtomicUser(storage[0]);
+      const invitedEmail = `${uniqueValue("rollback")}@example.com`;
+      const invitedUserId = await createAtomicUser(storage[0], {
+        email: invitedEmail
+      });
+      const organisationId = uniqueValue("org");
+      const tokenId = uniqueValue("tok");
+      const tokenHash = uniqueValue("invite");
+      const invitationId = uniqueValue("inv");
+      const eventId = uniqueValue("evt");
+      await storage[0].createOrganisation({
+        id: organisationId,
+        name: "Rollback invitation",
+        slug: uniqueValue("rollback-invitation"),
+        ownerUserId: ownerId,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        disabledAt: null
+      });
+      await storage[0].createToken({
+        id: tokenId,
+        tokenHash,
+        type: "organisation_invite",
+        userId: null,
+        email: invitedEmail,
+        phone: null,
+        organisationId,
+        expiresAt: new Date(now.getTime() + 60_000),
+        usedAt: null,
+        createdAt: now
+      });
+      await storage[0].createInvitation({
+        id: invitationId,
+        tokenId,
+        organisationId,
+        email: invitedEmail,
+        phone: null,
+        role: "member",
+        invitedByUserId: ownerId,
+        status: "pending",
+        expiresAt: new Date(now.getTime() + 60_000),
+        acceptedAt: null,
+        revokedAt: null,
+        createdAt: now
+      });
+      await storage[0].createAuditEvent(
+        atomicEvent(eventId, "invite.accepted", invitedUserId, organisationId).auditEvent
+      );
+
+      let failed = false;
+      try {
+        await storage[0].acceptInvitationAtomically({
+          operationId: uniqueValue("op"),
+          tokenId,
+          tokenHash,
+          invitationId,
+          userId: invitedUserId,
+          memberId: uniqueValue("mem"),
+          acceptedAt: now,
+          event: atomicEvent(eventId, "invite.accepted", invitedUserId, organisationId)
+        });
+      } catch {
+        failed = true;
+      }
+      assertConformanceEqual(failed, true, "invitation rollback failure");
+      assertConformanceEqual(
+        (await storage[0].getInvitationById(invitationId))?.status,
+        "pending",
+        "rolled-back invitation status"
+      );
+      assertConformanceEqual(
+        (await storage[0].getTokenByHash(tokenHash, "organisation_invite"))?.usedAt,
+        null,
+        "rolled-back invitation token"
+      );
+      assertConformanceEqual(
+        (await storage[0].listOrganisationMembers(organisationId))
+          .filter((member) => member.userId === invitedUserId).length,
+        0,
+        "rolled-back invitation member count"
+      );
+    }
+  },
+  {
+    name: "allows only one terminal invitation decision",
+    async run({ storage }) {
+      const now = new Date();
+      const ownerId = await createAtomicUser(storage[0]);
+      const invitedEmail = `${uniqueValue("decision")}@example.com`;
+      const invitedUserId = await createAtomicUser(storage[0], {
+        email: invitedEmail
+      });
+      const organisationId = uniqueValue("org");
+      const tokenId = uniqueValue("tok");
+      const tokenHash = uniqueValue("invite");
+      const invitationId = uniqueValue("inv");
+      await storage[0].createOrganisation({
+        id: organisationId,
+        name: "Invitation decision",
+        slug: uniqueValue("invitation-decision"),
+        ownerUserId: ownerId,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        disabledAt: null
+      });
+      await storage[0].createToken({
+        id: tokenId,
+        tokenHash,
+        type: "organisation_invite",
+        userId: null,
+        email: invitedEmail,
+        phone: null,
+        organisationId,
+        expiresAt: new Date(now.getTime() + 60_000),
+        usedAt: null,
+        createdAt: now
+      });
+      await storage[0].createInvitation({
+        id: invitationId,
+        tokenId,
+        organisationId,
+        email: invitedEmail,
+        phone: null,
+        role: "member",
+        invitedByUserId: ownerId,
+        status: "pending",
+        expiresAt: new Date(now.getTime() + 60_000),
+        acceptedAt: null,
+        revokedAt: null,
+        createdAt: now
+      });
+
+      const [accepted, revoked] = await Promise.all([
+        storage[0].acceptInvitationAtomically({
+          operationId: uniqueValue("op"),
+          tokenId,
+          tokenHash,
+          invitationId,
+          userId: invitedUserId,
+          memberId: uniqueValue("mem"),
+          acceptedAt: now,
+          event: atomicEvent(
+            uniqueValue("evt"),
+            "invite.accepted",
+            invitedUserId,
+            organisationId
+          )
+        }),
+        storage[1].revokeInvitationAtomically({
+          operationId: uniqueValue("op"),
+          invitationId,
+          revokedAt: now,
+          event: atomicEvent(
+            uniqueValue("evt"),
+            "invite.revoked",
+            ownerId,
+            organisationId
+          )
+        })
+      ]);
+
+      assertConformanceEqual(
+        Number(Boolean(accepted)) + Number(Boolean(revoked)),
+        1,
+        "terminal invitation winner count"
+      );
+      const finalStatus = (await storage[0].getInvitationById(invitationId))?.status;
+      assertConformanceEqual(
+        finalStatus === "accepted" || finalStatus === "revoked",
+        true,
+        "terminal invitation status"
+      );
+      assertConformanceEqual(
+        (await storage[0].getTokenByHash(tokenHash, "organisation_invite"))?.usedAt
+          instanceof Date,
+        true,
+        "terminal invitation token consumption"
+      );
+      assertConformanceEqual(
+        (await storage[0].listOrganisationMembers(organisationId))
+          .filter((member) => member.userId === invitedUserId).length,
+        accepted ? 1 : 0,
+        "terminal invitation member count"
+      );
+      assertConformanceEqual(
+        (await storage[0].listAuditEvents({ organisationId })).filter(
+          (event) =>
+            event.eventType === "invite.accepted" ||
+            event.eventType === "invite.revoked"
+        ).length,
+        1,
+        "terminal invitation audit count"
+      );
+    }
+  },
+  {
+    name: "preserves one login method during concurrent cross-kind removal",
+    async run({ storage }) {
+      const now = new Date();
+      const userId = await createAtomicUser(storage[0], { email: null });
+      const accountId = uniqueValue("acct");
+      const passkeyId = uniqueValue("pky");
+      await storage[0].createAccount({
+        id: accountId,
+        userId,
+        provider: "google",
+        providerAccountId: uniqueValue("google"),
+        providerEmail: null,
+        providerPhone: null,
+        createdAt: now,
+        updatedAt: now
+      });
+      await storage[0].createPasskeyCredential({
+        id: passkeyId,
+        userId,
+        credentialId: uniqueValue("credential"),
+        publicKey: new Uint8Array([1, 2, 3, 4]),
+        counter: 0,
+        transports: ["internal"],
+        deviceType: "singleDevice",
+        backedUp: false,
+        discoverable: true,
+        name: "Atomic passkey",
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        lastUsedAt: null
+      });
+
+      const results = await Promise.all([
+        storage[0].removeAuthenticationMethodAtomically({
+          operationId: uniqueValue("op"),
+          userId,
+          method: { kind: "account", id: accountId },
+          event: atomicEvent(uniqueValue("evt"), "external_provider.unlinked", userId)
+        }),
+        storage[1].removeAuthenticationMethodAtomically({
+          operationId: uniqueValue("op"),
+          userId,
+          method: { kind: "passkey", id: passkeyId },
+          event: atomicEvent(uniqueValue("evt"), "passkey.revoked", userId)
+        })
+      ]);
+      assertConformanceArrayEqual(
+        [...results].sort(),
+        ["last_method", "removed"],
+        "authentication-method removal results"
+      );
+      assertConformanceEqual(
+        (await storage[0].listAccountsByUserId(userId)).length +
+          (await storage[0].listPasskeyCredentialsByUserId(userId)).length,
+        1,
+        "remaining authentication-method count"
+      );
+      assertConformanceEqual(
+        (await storage[0].listAuditEvents({ userId })).filter(
+          (event) =>
+            event.eventType === "external_provider.unlinked" ||
+            event.eventType === "passkey.revoked"
+        ).length,
+        1,
+        "authentication-method removal audit count"
+      );
+    }
   }
 ];
 
-async function createAtomicUser(storage: AuthStorage): Promise<string> {
+async function createAtomicUser(
+  storage: AuthStorage,
+  input: { email?: string | null } = {}
+): Promise<string> {
   const now = new Date();
   const id = uniqueValue("usr");
   await storage.createUser({
     id,
-    email: `${id}@example.com`,
+    email: input.email === undefined ? `${id}@example.com` : input.email,
     emailVerifiedAt: null,
     phone: null,
     phoneVerifiedAt: null,
@@ -370,4 +743,32 @@ async function createAtomicUser(storage: AuthStorage): Promise<string> {
     lastLoginAt: null
   });
   return id;
+}
+
+function atomicEvent(
+  id: string,
+  eventType:
+    | "external_provider.unlinked"
+    | "invite.accepted"
+    | "invite.revoked"
+    | "passkey.revoked",
+  userId: string,
+  organisationId: string | null = null
+): AtomicAuthEventWrite {
+  return {
+    auditEvent: {
+      id,
+      eventType,
+      actorUserId: userId,
+      targetUserId: userId,
+      organisationId,
+      apiKeyId: null,
+      ipAddress: null,
+      userAgent: null,
+      metadata: {},
+      createdAt: new Date()
+    },
+    webhookEvent: null,
+    webhookDeliveries: []
+  };
 }

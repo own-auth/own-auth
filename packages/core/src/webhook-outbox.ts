@@ -1,33 +1,48 @@
 import { createId } from "./crypto.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
+import type { AtomicAuthEventWrite } from "./auth-storage-atomic.js";
 import type { AuditEvent } from "./types.js";
 import { createStoredWebhookEvent } from "./webhook-events.js";
 
-export async function recordAuthEvent(
+export function prepareAuthEventWrite(
   ctx: AuthEngineContext,
   auditEvent: AuditEvent
-): Promise<void> {
-  const event = createStoredWebhookEvent(auditEvent);
-  const endpoints = event && ctx.webhooks
-    ? ctx.webhooks.endpoints.filter((endpoint) => endpoint.events.has(event.type))
+): AtomicAuthEventWrite {
+  const webhookEvent = createStoredWebhookEvent(auditEvent);
+  const endpoints = webhookEvent && ctx.webhooks
+    ? ctx.webhooks.endpoints.filter((endpoint) => endpoint.events.has(webhookEvent.type))
     : [];
 
-  if (!event || endpoints.length === 0) {
-    await ctx.storage.createAuditEvent(auditEvent);
-    return;
-  }
-  if (!ctx.webhookStorage) {
+  if (webhookEvent && endpoints.length > 0 && !ctx.webhookStorage) {
     throw new Error("WebhookCapableStorage is required when webhooks are configured");
   }
 
-  await ctx.webhookStorage.recordAuditEventWithWebhooks(
+  return {
     auditEvent,
-    event,
-    endpoints.map((endpoint) => ({
+    webhookEvent: endpoints.length > 0 ? webhookEvent : null,
+    webhookDeliveries: endpoints.map((endpoint) => ({
       id: createId("whd"),
       endpointId: endpoint.id,
       url: endpoint.url,
       createdAt: auditEvent.createdAt
     }))
+  };
+}
+
+export async function recordAuthEvent(
+  ctx: AuthEngineContext,
+  auditEvent: AuditEvent
+): Promise<void> {
+  const write = prepareAuthEventWrite(ctx, auditEvent);
+
+  if (!write.webhookEvent) {
+    await ctx.storage.createAuditEvent(auditEvent);
+    return;
+  }
+
+  await ctx.webhookStorage!.recordAuditEventWithWebhooks(
+    write.auditEvent,
+    write.webhookEvent,
+    write.webhookDeliveries
   );
 }

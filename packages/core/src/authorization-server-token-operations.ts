@@ -211,7 +211,8 @@ export async function revokeAuthorizationUserGrant(
     resource?.id ?? null
   );
   if (!grant || grant.revokedAt) return;
-  await storage.revokeAuthorizationGrant(grant.id, new Date());
+  const revoked = await storage.revokeAuthorizationGrant(grant.id, new Date());
+  if (!revoked) return;
   await audit(ctx, {
     eventType: "authorization_server.grant_revoked",
     actorUserId: input.actorUserId,

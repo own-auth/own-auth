@@ -1,4 +1,11 @@
 import type {
+  AtomicAuthenticationMethodRemovalInput,
+  AtomicAuthenticationMethodRemovalResult,
+  AtomicInvitationAcceptanceInput,
+  AtomicInvitationAcceptanceResult,
+  AtomicInvitationRevocationInput
+} from "../auth-storage-atomic.js";
+import type {
   Account,
   ApiKey,
   AuditEvent,
@@ -51,6 +58,11 @@ import {
   userReturning
 } from "../database-schema.js";
 import { databaseColumnEntries } from "../database-types.js";
+import {
+  acceptPostgresInvitationAtomically,
+  removePostgresAuthenticationMethodAtomically,
+  revokePostgresInvitationAtomically
+} from "./postgres-auth-atomic-operations.js";
 import {
   atomicConsumeSmsOtp,
   atomicConsumeToken,
@@ -442,6 +454,24 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
       [organisationId, email]
     );
     return row ? mapInvitation(row) : null;
+  }
+
+  acceptInvitationAtomically(
+    input: AtomicInvitationAcceptanceInput
+  ): Promise<AtomicInvitationAcceptanceResult | null> {
+    return acceptPostgresInvitationAtomically(this.db, input);
+  }
+
+  revokeInvitationAtomically(
+    input: AtomicInvitationRevocationInput
+  ): Promise<Invitation<string> | null> {
+    return revokePostgresInvitationAtomically(this.db, input);
+  }
+
+  removeAuthenticationMethodAtomically(
+    input: AtomicAuthenticationMethodRemovalInput
+  ): Promise<AtomicAuthenticationMethodRemovalResult> {
+    return removePostgresAuthenticationMethodAtomically(this.db, input);
   }
 
   async createAuditEvent(event: AuditEvent): Promise<AuditEvent> {

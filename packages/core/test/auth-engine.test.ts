@@ -157,6 +157,77 @@ describe("OwnAuth core", () => {
     }
   });
 
+  it("rejects raw token exposure in production", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousTokenPepper = process.env.OWN_AUTH_TOKEN_PEPPER;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.OWN_AUTH_TOKEN_PEPPER = "production-token-pepper-at-least-32-bytes";
+
+      expect(() => createOwnAuth({
+        storage: new InMemoryAuthStorage(),
+        exposeRawTokens: true
+      })).toThrow("exposeRawTokens cannot be enabled in production.");
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousTokenPepper === undefined) {
+        delete process.env.OWN_AUTH_TOKEN_PEPPER;
+      } else {
+        process.env.OWN_AUTH_TOKEN_PEPPER = previousTokenPepper;
+      }
+    }
+  });
+
+  it("requires a strong token pepper in production", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousTokenPepper = process.env.OWN_AUTH_TOKEN_PEPPER;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.OWN_AUTH_TOKEN_PEPPER = "too-short";
+
+      expect(() => createOwnAuth({
+        storage: new InMemoryAuthStorage()
+      })).toThrow("OWN_AUTH_TOKEN_PEPPER must be at least 32 bytes in production.");
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousTokenPepper === undefined) {
+        delete process.env.OWN_AUTH_TOKEN_PEPPER;
+      } else {
+        process.env.OWN_AUTH_TOKEN_PEPPER = previousTokenPepper;
+      }
+    }
+  });
+
+  it.each([
+    [{ session: { ttlMs: 0 } }, "session.ttlMs must be a positive integer"],
+    [{ session: { idleTtlMs: Number.POSITIVE_INFINITY } }, "session.idleTtlMs must be a positive integer"],
+    [{ tokenTtlMs: { magic_link: -1 } }, "tokenTtlMs.magic_link must be a positive integer"],
+    [{ sms: { otpTtlMs: 0 } }, "sms.otpTtlMs must be a positive integer"],
+    [{ sms: { maxAttempts: 0 } }, "sms.maxAttempts must be an integer from 1 to 100"],
+    [{ sms: { codeLength: 3 } }, "sms.codeLength must be an integer from 4 to 10"],
+    [{ password: { minLength: 0 } }, "password.minLength must be an integer from 8 to 1024"],
+    [{ password: { maxLength: 7 } }, "password.maxLength must be an integer from 8 to 1024"],
+    [
+      { password: { minLength: 64, maxLength: 32 } },
+      "password.minLength cannot exceed password.maxLength"
+    ]
+  ] as const)("rejects unsafe auth configuration %#", (options, message) => {
+    expect(() => createOwnAuth({
+      storage: new InMemoryAuthStorage(),
+      ...options
+    })).toThrow(message);
+  });
+
   it("uses Postgres storage and rate limits from DATABASE_URL outside tests", () => {
     const previousNodeEnv = process.env.NODE_ENV;
     const previousDatabaseUrl = process.env.DATABASE_URL;

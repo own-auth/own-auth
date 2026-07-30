@@ -28,6 +28,7 @@ export const persistenceConformanceAuthMethods = [
   "signInWithVerifiedExternalIdentity",
   "signOut",
   "signUpEmailPassword",
+  "unlinkOAuthProvider",
   "verifyApiKey",
   "verifyEmail",
   "verifyMagicLink",

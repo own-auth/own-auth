@@ -346,6 +346,16 @@ export type {
 export { OWN_AUTH_VERSION } from "./version.js";
 export { InMemoryAuthStorage } from "./memory-storage.js";
 export type {
+  AtomicAuthEventWrite,
+  AtomicAuthenticationMethodRemovalInput,
+  AtomicAuthenticationMethodRemovalResult,
+  AtomicInvitationAcceptanceInput,
+  AtomicInvitationAcceptanceResult,
+  AtomicInvitationRevocationInput,
+  AtomicWebhookDeliverySeed,
+  AuthenticationMethodReference
+} from "./auth-storage-atomic.js";
+export type {
   AuditEventFilter,
   AuthStorage,
   ListUsersFilter,

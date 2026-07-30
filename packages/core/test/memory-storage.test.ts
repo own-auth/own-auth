@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryAuthStorage,
+  InMemoryRateLimitStore,
   type AuditEvent,
   type StoredWebhookEvent,
   type User
 } from "../src/index.js";
+import {
+  describeAtomicAdapterConformance
+} from "./conformance/atomic-adapter-conformance.js";
+
+describeAtomicAdapterConformance("Memory", async () => {
+  const storage = new InMemoryAuthStorage();
+  const rateLimits = new InMemoryRateLimitStore();
+  return {
+    storage: [storage, storage],
+    rateLimits: [rateLimits, rateLimits],
+    close() {}
+  };
+});
 
 describe("InMemoryAuthStorage", () => {
   it("keeps entity IDs immutable when applying patches", async () => {

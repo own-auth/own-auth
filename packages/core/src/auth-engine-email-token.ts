@@ -1,4 +1,4 @@
-import { normalizeEmail } from "./normalise.js";
+import { randomBase64Url } from "./crypto.js";
 import type { AuditEventType, RequestContext, TokenType } from "./types.js";
 import type { DeliveryResult } from "./auth-engine-types.js";
 import { sendEmail } from "./auth-engine-delivery.js";
@@ -8,6 +8,7 @@ import {
   delivery,
   issueToken,
   rateLimit,
+  requireValidEmail,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 
@@ -27,12 +28,18 @@ export async function requestEmailToken(
     request?: RequestContext;
   }
 ): Promise<DeliveryResult> {
-  const email = normalizeEmail(input.email);
+  const email = requireValidEmail(input.email);
   await rateLimit(ctx, input.rateLimitKey, email, input.rateLimitMax, input.rateLimitWindowMs);
 
   const user = await ctx.storage.getUserByEmail(email);
   if (!user && !input.allowMissing) {
-    return { sent: true, expiresAt: null };
+    const rawToken = randomBase64Url(32);
+    const expiresAt = new Date(Date.now() + ctx.tokenTtls[input.tokenType]);
+    const url = buildUrl(ctx, input.urlPath, {
+      token: rawToken,
+      ...input.extraUrlParams
+    });
+    return delivery(ctx, rawToken, url, expiresAt);
   }
 
   const issued = await issueToken(ctx, input.tokenType, {

@@ -102,6 +102,13 @@ export async function hashPasswordInput(
       400
     );
   }
+  if (password.length > ctx.passwordMaxLength) {
+    throw new AuthError(
+      "password_too_long",
+      `Password must be at most ${ctx.passwordMaxLength} characters`,
+      400
+    );
+  }
 
   return hashPassword(password);
 }

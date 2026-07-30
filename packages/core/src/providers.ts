@@ -1,3 +1,4 @@
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 import type { TokenType } from "./types.js";
 import { isRecord } from "./value-guards.js";
 
@@ -58,7 +59,11 @@ export class OwnAuthManagedEmailProvider implements EmailProvider {
 
     this.deliveryKey = options.deliveryKey;
     this.endpoint = (options.endpoint ?? "https://api.own-auth.com/v1/email").toString();
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    const fetchImpl = resolveFetchImplementation(options.fetch);
+    if (!fetchImpl) {
+      throw new Error("Own Auth managed email delivery requires a Fetch API implementation.");
+    }
+    this.fetchImpl = fetchImpl;
   }
 
   async send(message: EmailMessage): Promise<void> {
@@ -129,6 +134,10 @@ function safeManagedDeliveryErrorText(value: unknown): string {
 
 export class ConsoleEmailProvider implements EmailProvider {
   async send(message: EmailMessage): Promise<void> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Email delivery must be configured in production.");
+    }
+
     console.info("[own-auth email]", {
       to: message.to,
       type: message.type,
@@ -139,6 +148,10 @@ export class ConsoleEmailProvider implements EmailProvider {
 
 export class ConsoleSmsProvider implements SmsProvider {
   async send(message: SmsMessage): Promise<void> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SMS delivery must be configured in production.");
+    }
+
     console.info("[own-auth sms]", {
       to: message.to,
       purpose: message.purpose,

@@ -1,7 +1,6 @@
 import {
-  clientErrorFromResponse,
   OwnAuthClientError,
-  readJsonResponse
+  requestJson
 } from "./client-error.js";
 import type { OwnAuthPluginClientManifest } from "./plugin-types.js";
 
@@ -39,9 +38,11 @@ export async function callOwnAuthPluginMethod<Output>(options: {
     init.body = JSON.stringify(options.input);
   }
 
-  const response = await options.fetch(toRequestUrl(url, options.baseURL), init);
-  const body = await readJsonResponse(response);
-  if (!response.ok) throw clientErrorFromResponse(body, response.status);
+  const { body, response } = await requestJson(
+    options.fetch,
+    toRequestUrl(url, options.baseURL),
+    init
+  );
 
   const serverFingerprint = response.headers.get("x-own-auth-plugin-fingerprint");
   if (options.fingerprint && options.fingerprint !== serverFingerprint) {

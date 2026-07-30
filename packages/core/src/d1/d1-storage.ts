@@ -1,3 +1,10 @@
+import type {
+  AtomicAuthenticationMethodRemovalInput,
+  AtomicAuthenticationMethodRemovalResult,
+  AtomicInvitationAcceptanceInput,
+  AtomicInvitationAcceptanceResult,
+  AtomicInvitationRevocationInput
+} from "../auth-storage-atomic.js";
 import type { AuditEventFilter, AuthStorage, ListUsersFilter } from "../storage.js";
 import {
   buildAuditEventListQuery,
@@ -51,6 +58,11 @@ import {
   userColumns,
   userReturning
 } from "../database-schema.js";
+import {
+  acceptD1InvitationAtomically,
+  removeD1AuthenticationMethodAtomically,
+  revokeD1InvitationAtomically
+} from "./d1-auth-atomic-operations.js";
 import {
   atomicConsumeD1SmsOtp,
   atomicConsumeD1Token,
@@ -464,6 +476,24 @@ export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
       [organisationId, email]
     );
     return row ? mapInvitation(row) : null;
+  }
+
+  acceptInvitationAtomically(
+    input: AtomicInvitationAcceptanceInput
+  ): Promise<AtomicInvitationAcceptanceResult | null> {
+    return acceptD1InvitationAtomically(this.db, input);
+  }
+
+  revokeInvitationAtomically(
+    input: AtomicInvitationRevocationInput
+  ): Promise<Invitation<string> | null> {
+    return revokeD1InvitationAtomically(this.db, input);
+  }
+
+  removeAuthenticationMethodAtomically(
+    input: AtomicAuthenticationMethodRemovalInput
+  ): Promise<AtomicAuthenticationMethodRemovalResult> {
+    return removeD1AuthenticationMethodAtomically(this.db, input);
   }
 
   async createAuditEvent(event: AuditEvent): Promise<AuditEvent> {

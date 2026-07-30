@@ -13,6 +13,7 @@ const ARGON2_MAX_TIME_COST = 10;
 const ARGON2_MAX_PARALLELISM = 4;
 const ARGON2_MAX_SALT_LENGTH = 64;
 const ARGON2_MAX_HASH_LENGTH = 64;
+const MAXIMUM_PASSWORD_INPUT_LENGTH = 4_096;
 
 const LEGACY_SCRYPT_VERSION = "scrypt";
 const LEGACY_SCRYPT_N = 16384;
@@ -34,6 +35,9 @@ interface ParsedArgon2idHash extends Omit<Argon2Parameters, "hashLength"> {
 }
 
 export async function hashPassword(password: string): Promise<string> {
+  if (password.length > MAXIMUM_PASSWORD_INPUT_LENGTH) {
+    throw new Error("Password input is too long.");
+  }
   const salt = randomBytes(ARGON2_SALT_LENGTH);
   const hash = await deriveArgon2id(password, salt, {
     memoryCost: ARGON2_MEMORY_COST,
@@ -50,6 +54,9 @@ export async function verifyPassword(
   password: string,
   encodedHash: string
 ): Promise<boolean> {
+  if (password.length > MAXIMUM_PASSWORD_INPUT_LENGTH) {
+    return false;
+  }
   if (!encodedHash.startsWith("$argon2id$")) {
     return verifyLegacyScryptPassword(password, encodedHash);
   }

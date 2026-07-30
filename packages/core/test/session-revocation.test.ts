@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createOwnAuth, InMemoryAuthStorage } from "../src/index.js";
+import {
+  createOwnAuth,
+  InMemoryAuthStorage,
+  type Session
+} from "../src/index.js";
 
 function createTestAuth() {
   return createOwnAuth({
@@ -83,4 +87,61 @@ describe("session revocation", () => {
 
     await expect(auth.getCurrentSession(other.sessionToken)).resolves.not.toBeNull();
   });
+
+  it.each(["revoked", "missing", "disabled"] as const)(
+    "fails closed when a session becomes %s during its activity update",
+    async (outcome) => {
+      const storage = new SessionTouchRaceStorage(outcome);
+      const auth = createOwnAuth({
+        storage,
+        tokenPepper: `session-${outcome}-race`
+      });
+      const signup = await auth.signUpEmailPassword({
+        email: `${outcome}-session-race@example.com`,
+        password: "correct-horse"
+      });
+      storage.arm(signup.user.id);
+
+      await expect(auth.getCurrentSession(signup.sessionToken)).resolves.toBeNull();
+    }
+  );
 });
+
+class SessionTouchRaceStorage extends InMemoryAuthStorage {
+  private armed = false;
+  private userId: string | null = null;
+
+  constructor(private readonly outcome: "revoked" | "missing" | "disabled") {
+    super();
+  }
+
+  arm(userId: string): void {
+    this.armed = true;
+    this.userId = userId;
+  }
+
+  override async updateSession(
+    id: string,
+    patch: Partial<Session>
+  ): Promise<Session | null> {
+    if (!this.armed || !patch.lastActiveAt) {
+      return super.updateSession(id, patch);
+    }
+    this.armed = false;
+    if (this.outcome === "missing") {
+      return null;
+    }
+    if (this.outcome === "disabled") {
+      await super.updateUser(this.userId ?? "", {
+        disabledAt: new Date(),
+        updatedAt: new Date()
+      });
+      return super.updateSession(id, patch);
+    }
+    await super.updateSession(id, {
+      revokedAt: new Date(),
+      revokeReason: "concurrent_revocation"
+    });
+    return super.updateSession(id, patch);
+  }
+}

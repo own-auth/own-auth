@@ -9,9 +9,9 @@ import {
   type SignInPayload
 } from "./http/contract.js";
 import {
-  clientErrorFromResponse,
+  clientErrorFromUnknown,
   OwnAuthClientError,
-  readJsonResponse
+  requestJson
 } from "./client-error.js";
 import {
   getBrowserOrigin,
@@ -23,6 +23,7 @@ import {
   callOwnAuthPluginMethod,
   type OwnAuthPluginClient
 } from "./client-plugin.js";
+import { resolveFetchImplementation } from "./fetch-implementation.js";
 import type { OwnAuthPluginClientManifest } from "./plugin-types.js";
 
 export { OwnAuthClientError } from "./client-error.js";
@@ -68,6 +69,7 @@ export class OwnAuthClient {
   private readonly pluginFingerprint?: string;
   private readonly listeners = new Set<OwnAuthSessionListener>();
   private sessionLoaded = false;
+  private sessionRevision = 0;
   private sessionRequest: Promise<AuthSessionPayload | null> | null = null;
   private snapshot: OwnAuthSessionSnapshot = {
     data: null,
@@ -77,7 +79,11 @@ export class OwnAuthClient {
 
   constructor(options: OwnAuthClientOptions = {}) {
     this.baseURL = (options.baseURL ?? "/api/auth").replace(/\/+$/, "");
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    const fetchImpl = resolveFetchImplementation(options.fetch);
+    if (!fetchImpl) {
+      throw new Error("Own Auth client requires a Fetch API implementation");
+    }
+    this.fetchImpl = fetchImpl;
     this.configuredHeaders = options.headers;
     this.pluginManifests = new Map((options.plugins ?? []).map((plugin) => [plugin.id, plugin]));
     this.pluginFingerprint = options.pluginFingerprint;
@@ -113,14 +119,21 @@ export class OwnAuthClient {
   }
 
   async getSession(): Promise<AuthSessionPayload | null> {
+    const revision = ++this.sessionRevision;
     this.updateSnapshot({ ...this.snapshot, isPending: true, error: null });
     try {
       const result = await this.request("getSession", undefined);
+      if (this.sessionRevision !== revision) {
+        return this.snapshot.data;
+      }
       this.sessionLoaded = true;
       this.updateSnapshot({ data: result.session, isPending: false, error: null });
       return result.session;
     } catch (error) {
-      const clientError = toClientError(error);
+      const clientError = clientErrorFromUnknown(error);
+      if (this.sessionRevision !== revision) {
+        return this.snapshot.data;
+      }
       this.updateSnapshot({ data: null, isPending: false, error: clientError });
       throw clientError;
     }
@@ -140,8 +153,7 @@ export class OwnAuthClient {
 
   async signOut(): Promise<void> {
     await this.request("signOut", undefined);
-    this.sessionLoaded = true;
-    this.updateSnapshot({ data: null, isPending: false, error: null });
+    this.clearSession();
   }
 
   async changePassword(
@@ -188,8 +200,7 @@ export class OwnAuthClient {
     input: OwnAuthEndpointInputMap["resetPassword"]
   ): Promise<PublicAuthUser> {
     const result = await this.request("resetPassword", input);
-    this.sessionLoaded = true;
-    this.updateSnapshot({ data: null, isPending: false, error: null });
+    this.clearSession();
     return result.user;
   }
 
@@ -203,7 +214,11 @@ export class OwnAuthClient {
     input: OwnAuthEndpointInputMap["verifySmsOtp"]
   ): Promise<OwnAuthEndpointOutputMap["verifySmsOtp"]> {
     const result = await this.request("verifySmsOtp", input);
-    if (result.status === "complete") this.setCreatedSession(result);
+    if (result.status === "complete") {
+      this.setCreatedSession(result);
+    } else if (result.status === "verified") {
+      this.updateUser(result.user);
+    }
     return result;
   }
 
@@ -380,11 +395,11 @@ export class OwnAuthClient {
       init.body = JSON.stringify(input);
     }
 
-    const response = await this.fetchImpl(`${this.baseURL}${endpoint.path}`, init);
-    const body = await readJsonResponse(response);
-    if (!response.ok) {
-      throw clientErrorFromResponse(body, response.status);
-    }
+    const { body } = await requestJson(
+      this.fetchImpl,
+      `${this.baseURL}${endpoint.path}`,
+      init
+    );
     return body as OwnAuthEndpointOutputMap[Id];
   }
 
@@ -396,9 +411,16 @@ export class OwnAuthClient {
   }
 
   private setCreatedSession(session: AuthSessionPayload): AuthSessionPayload {
+    this.sessionRevision += 1;
     this.sessionLoaded = true;
     this.updateSnapshot({ data: session, isPending: false, error: null });
     return session;
+  }
+
+  private clearSession(): void {
+    this.sessionRevision += 1;
+    this.sessionLoaded = true;
+    this.updateSnapshot({ data: null, isPending: false, error: null });
   }
 
   private acceptSignInResult(result: SignInPayload): SignInPayload {
@@ -410,6 +432,7 @@ export class OwnAuthClient {
     if (!this.snapshot.data || this.snapshot.data.user.id !== user.id) {
       return;
     }
+    this.sessionRevision += 1;
     this.updateSnapshot({
       ...this.snapshot,
       data: { ...this.snapshot.data, user },
@@ -427,10 +450,4 @@ export class OwnAuthClient {
 
 export function createOwnAuthClient(options?: OwnAuthClientOptions): OwnAuthClient {
   return new OwnAuthClient(options);
-}
-
-function toClientError(error: unknown): OwnAuthClientError {
-  return error instanceof OwnAuthClientError
-    ? error
-    : new OwnAuthClientError("internal_error", "Authentication request failed", 500);
 }

@@ -77,6 +77,7 @@ export interface AuthEngineContext {
   smsMaxAttempts: number;
   smsCodeLength: number;
   passwordMinLength: number;
+  passwordMaxLength: number;
   encryption: EncryptionKeyRing | null;
   oauthProviders: ReadonlyMap<ExternalAccountProvider, OAuthProviderAdapter>;
   oauthAccountLinking: OAuthAccountLinking;
@@ -102,8 +103,16 @@ export interface AuthEngineContext {
 
 export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngineContext {
   const tokenPepper = options.tokenPepper ?? process.env.OWN_AUTH_TOKEN_PEPPER ?? "";
-  if (process.env.NODE_ENV === "production" && tokenPepper.length === 0) {
-    throw new Error("OWN_AUTH_TOKEN_PEPPER is required in production.");
+  if (process.env.NODE_ENV === "production") {
+    if (tokenPepper.length === 0) {
+      throw new Error("OWN_AUTH_TOKEN_PEPPER is required in production.");
+    }
+    if (new TextEncoder().encode(tokenPepper).length < 32) {
+      throw new Error("OWN_AUTH_TOKEN_PEPPER must be at least 32 bytes in production.");
+    }
+    if (options.exposeRawTokens) {
+      throw new Error("exposeRawTokens cannot be enabled in production.");
+    }
   }
 
   const baseUrl = options.baseUrl ?? "http://localhost:3000";
@@ -191,6 +200,8 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     );
   }
 
+  const password = normalizePasswordOptions(options.password);
+
   return {
     storage: persistence.storage,
     rateLimitStore: options.rateLimitStore ?? persistence.rateLimitStore,
@@ -202,13 +213,33 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     allowMagicLinkSignup: options.allowMagicLinkSignup ?? true,
     allowPhoneSignup: options.allowPhoneSignup ?? true,
     redirectAllowlist: [...(options.redirectAllowlist ?? [baseUrl])],
-    sessionTtlMs: options.session?.ttlMs ?? 30 * day,
-    sessionIdleTtlMs: options.session?.idleTtlMs ?? 7 * day,
-    tokenTtls: { ...defaultTokenTtls, ...options.tokenTtlMs },
-    smsOtpTtlMs: options.sms?.otpTtlMs ?? 10 * minute,
-    smsMaxAttempts: options.sms?.maxAttempts ?? 5,
-    smsCodeLength: options.sms?.codeLength ?? 6,
-    passwordMinLength: options.password?.minLength ?? 8,
+    sessionTtlMs: positiveInteger(
+      options.session?.ttlMs ?? 30 * day,
+      "session.ttlMs"
+    ),
+    sessionIdleTtlMs: positiveInteger(
+      options.session?.idleTtlMs ?? 7 * day,
+      "session.idleTtlMs"
+    ),
+    tokenTtls: normalizeTokenTtls(options.tokenTtlMs),
+    smsOtpTtlMs: positiveInteger(
+      options.sms?.otpTtlMs ?? 10 * minute,
+      "sms.otpTtlMs"
+    ),
+    smsMaxAttempts: boundedInteger(
+      options.sms?.maxAttempts ?? 5,
+      1,
+      100,
+      "sms.maxAttempts"
+    ),
+    smsCodeLength: boundedInteger(
+      options.sms?.codeLength ?? 6,
+      4,
+      10,
+      "sms.codeLength"
+    ),
+    passwordMinLength: password.minLength,
+    passwordMaxLength: password.maxLength,
     encryption,
     oauthProviders,
     oauthAccountLinking: options.oauth?.accountLinking ?? "explicit",
@@ -289,10 +320,47 @@ function normalizeMfaOptions(options: OwnAuthOptions["mfa"]): {
 }
 
 function positiveInteger(value: number, option: string): number {
-  if (!Number.isInteger(value) || value < 1) {
+  if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error(`${option} must be a positive integer`);
   }
   return value;
+}
+
+function boundedInteger(
+  value: number,
+  minimum: number,
+  maximum: number,
+  option: string
+): number {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${option} must be an integer from ${minimum} to ${maximum}`);
+  }
+  return value;
+}
+
+function normalizeTokenTtls(options: TokenTtlConfig | undefined): Required<TokenTtlConfig> {
+  const configured = { ...defaultTokenTtls, ...options };
+  for (const type of Object.keys(configured) as (keyof typeof configured)[]) {
+    configured[type] = positiveInteger(configured[type], `tokenTtlMs.${type}`);
+  }
+  return configured;
+}
+
+function normalizePasswordOptions(options: OwnAuthOptions["password"]): {
+  minLength: number;
+  maxLength: number;
+} {
+  const minLength = boundedInteger(options?.minLength ?? 8, 8, 1_024, "password.minLength");
+  const maxLength = boundedInteger(
+    options?.maxLength ?? 128,
+    8,
+    1_024,
+    "password.maxLength"
+  );
+  if (minLength > maxLength) {
+    throw new Error("password.minLength cannot exceed password.maxLength");
+  }
+  return { minLength, maxLength };
 }
 
 function normalizePasskeyOptions(options?: PasskeyOptions): Required<PasskeyOptions> | null {

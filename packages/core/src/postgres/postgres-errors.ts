@@ -10,6 +10,14 @@ export async function withPostgresIdentityErrors<Value>(
   }
 }
 
+export function isPostgresUniqueConstraint(
+  error: unknown,
+  constraint: string
+): boolean {
+  const postgresError = asPostgresError(error);
+  return postgresError?.code === "23505" && postgresError.constraint === constraint;
+}
+
 function rethrowPostgresIdentityError(error: unknown): never {
   const postgresError = asPostgresError(error);
   if (postgresError?.code !== "23505") {

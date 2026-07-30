@@ -97,6 +97,67 @@ describe("OwnAuthClient", () => {
     unsubscribe();
   });
 
+  it("does not let an older session request restore state after sign-out", async () => {
+    let resolveSession!: (response: Response) => void;
+    const sessionResponse = new Promise<Response>((resolve) => {
+      resolveSession = resolve;
+    });
+    const client = createOwnAuthClient({
+      baseURL: "http://localhost/api/auth",
+      fetch: (async (input, init) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.endsWith("/session") && init?.method === "GET") {
+          return sessionResponse;
+        }
+        return Response.json({ success: true });
+      }) as typeof fetch
+    });
+
+    const pendingSession = client.getSession();
+    await client.signOut();
+    resolveSession(Response.json({ session: publicSession("stale@example.com") }));
+    await expect(pendingSession).resolves.toBeNull();
+
+    expect(client.getSessionSnapshot()).toEqual({
+      data: null,
+      isPending: false,
+      error: null
+    });
+  });
+
+  it("keeps the cached user in sync after phone verification", async () => {
+    const session = publicSession("client@example.com");
+    const verifiedUser = {
+      ...session.user,
+      phone: "+14155550123",
+      phoneVerifiedAt: "2026-07-30T00:01:00.000Z"
+    };
+    const client = createOwnAuthClient({
+      baseURL: "http://localhost/api/auth",
+      fetch: (async (input) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        return url.endsWith("/sms/verify")
+          ? Response.json({ status: "verified", user: verifiedUser })
+          : Response.json(session);
+      }) as typeof fetch
+    });
+    await client.signUpEmailPassword({
+      email: "client@example.com",
+      password: "correct-horse"
+    });
+
+    await client.verifySmsOtp({
+      phone: "+14155550123",
+      code: "123456",
+      purpose: "phone_verification"
+    });
+
+    expect(client.getSessionSnapshot().data?.user).toMatchObject({
+      email: "client@example.com",
+      phone: "+14155550123"
+    });
+  });
+
   it("throws typed client errors from the shared error envelope", async () => {
     const client = createClientHarness();
 
@@ -117,6 +178,48 @@ describe("OwnAuthClient", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(OwnAuthClientError);
     }
+  });
+
+  it("converts network failures into typed client errors", async () => {
+    const client = createOwnAuthClient({
+      baseURL: "http://localhost/api/auth",
+      fetch: (async () => {
+        throw new TypeError("network unavailable");
+      }) as typeof fetch
+    });
+
+    await expect(client.signInEmailPassword({
+      email: "user@example.com",
+      password: "correct-horse"
+    })).rejects.toEqual(expect.objectContaining({
+      name: "OwnAuthClientError",
+      code: "internal_error",
+      status: 0,
+      message: "Authentication request failed"
+    }));
+  });
+
+  it("converts plugin network failures into typed client errors", async () => {
+    const client = createOwnAuthClient({
+      baseURL: "http://localhost/api/auth",
+      plugins: [{
+        id: "network",
+        methods: {
+          ping: { method: "POST", path: "/plugins/network/ping" }
+        }
+      }],
+      fetch: (async () => {
+        throw new TypeError("network unavailable");
+      }) as typeof fetch
+    });
+
+    await expect(client.plugin("network").call("ping")).rejects.toEqual(
+      expect.objectContaining({
+        name: "OwnAuthClientError",
+        code: "internal_error",
+        status: 0
+      })
+    );
   });
 
   it.each([null, "different-fingerprint"])(
@@ -192,3 +295,36 @@ describe("OwnAuthClient", () => {
     })).resolves.toEqual({ tags: ["security", "portability"] });
   });
 });
+
+function publicSession(email: string) {
+  const timestamp = "2026-07-30T00:00:00.000Z";
+  return {
+    status: "complete",
+    user: {
+      id: "usr_stale",
+      email,
+      emailVerifiedAt: null,
+      phone: null,
+      phoneVerifiedAt: null,
+      name: null,
+      imageUrl: null,
+      metadata: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastLoginAt: timestamp
+    },
+    session: {
+      id: "ses_stale",
+      userId: "usr_stale",
+      createdAt: timestamp,
+      lastActiveAt: timestamp,
+      expiresAt: timestamp,
+      idleExpiresAt: timestamp,
+      ipAddress: null,
+      userAgent: null,
+      authenticationMethods: ["password"],
+      assuranceLevel: "aal1",
+      authenticatedAt: timestamp
+    }
+  };
+}

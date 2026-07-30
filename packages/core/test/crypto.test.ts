@@ -140,4 +140,11 @@ describe("hashPassword / verifyPassword", () => {
     expect(await verifyPassword("test", "wrong$format")).toBe(false);
     expect(await verifyPassword("test", "$argon2id$broken")).toBe(false);
   });
+
+  it("rejects oversized password inputs before expensive hashing work", async () => {
+    const oversized = "a".repeat(4_097);
+
+    await expect(hashPassword(oversized)).rejects.toThrow("Password input is too long.");
+    await expect(verifyPassword(oversized, nativeArgon2idHash)).resolves.toBe(false);
+  });
 });

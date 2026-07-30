@@ -15,10 +15,12 @@ import {
 type Auth = ReturnType<typeof createOwnAuth>;
 
 export type StorageBarrierMethod =
+  | "acceptInvitationAtomically"
   | "createUser"
   | "consumeToken"
   | "consumeSmsOtp"
-  | "incrementSmsOtpAttempts";
+  | "incrementSmsOtpAttempts"
+  | "removeAuthenticationMethodAtomically";
 
 export interface AuthConcurrencyHarness {
   auth: readonly [Auth, Auth];
@@ -132,7 +134,7 @@ export const authConcurrencyCases: readonly AuthConcurrencyCase[] = [
   },
   {
     name: "allows only one concurrent invitation acceptance",
-    barrierMethod: "consumeToken",
+    barrierMethod: "acceptInvitationAtomically",
     async run({ auth, storage }) {
       const owner = await auth[0].signUpEmailPassword({
         email: uniqueEmail("owner"),
@@ -166,6 +168,58 @@ export const authConcurrencyCases: readonly AuthConcurrencyCase[] = [
           .filter((member) => member.userId === invited.user.id).length,
         1,
         "invited organisation-member count"
+      );
+    }
+  },
+  {
+    name: "preserves one login method during concurrent provider unlinking",
+    barrierMethod: "removeAuthenticationMethodAtomically",
+    async run({ auth, storage }) {
+      const now = new Date();
+      const userId = `usr_${crypto.randomUUID()}`;
+      await storage[0].createUser({
+        id: userId,
+        email: null,
+        emailVerifiedAt: null,
+        phone: null,
+        phoneVerifiedAt: null,
+        passwordHash: null,
+        name: null,
+        imageUrl: null,
+        disabledAt: null,
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null
+      });
+      const providers = ["google", "github"] as const;
+      const providerAccountIds = providers.map(() => crypto.randomUUID());
+      await Promise.all(providers.map((provider, index) =>
+        storage[0].createAccount({
+          id: `acct_${crypto.randomUUID()}`,
+          userId,
+          provider,
+          providerAccountId: providerAccountIds[index]!,
+          providerEmail: null,
+          providerPhone: null,
+          createdAt: now,
+          updatedAt: now
+        })
+      ));
+
+      assertSingleSettledWinner(await Promise.allSettled(
+        providers.map((provider, index) =>
+          auth[index as 0 | 1].unlinkOAuthProvider({
+            actorUserId: userId,
+            provider,
+            providerAccountId: providerAccountIds[index]!
+          })
+        )
+      ), "authentication_method_required", "provider unlinking");
+      assertConformanceEqual(
+        (await storage[0].listAccountsByUserId(userId)).length,
+        1,
+        "remaining provider account count"
       );
     }
   },

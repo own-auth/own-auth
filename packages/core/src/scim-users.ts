@@ -64,8 +64,15 @@ export async function authenticateRequest(
     config.requestLimit,
     config.requestWindowMs
   );
-  await storage.updateToken(token.id, { lastUsedAt: now });
-  return { connection, token: { ...token, lastUsedAt: now } };
+  const updatedToken = await storage.updateToken(token.id, { lastUsedAt: now });
+  if (
+    !updatedToken ||
+    updatedToken.revokedAt ||
+    (updatedToken.expiresAt && updatedToken.expiresAt <= now)
+  ) {
+    throw new AuthError("scim_token_invalid", "Invalid SCIM token", 401);
+  }
+  return { connection, token: updatedToken };
 }
 
 export async function linkUser(

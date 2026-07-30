@@ -1,4 +1,5 @@
 import { AuthError } from "./errors.js";
+import { normalizeEmail } from "./normalise.js";
 import type { User } from "./types.js";
 import {
   minute,
@@ -61,14 +62,15 @@ export async function verifyMagicLink(
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
+  requireMatchingTokenEmail(user, token.email);
 
   assertUserEnabled(user);
 
   if (!user.emailVerifiedAt && token.email) {
-    user = (await ctx.storage.updateUser(user.id, {
+    user = requireTokenUser(await ctx.storage.updateUser(user.id, {
       emailVerifiedAt: new Date(),
       updatedAt: new Date()
-    })) ?? user;
+    }));
   }
 
   await audit(ctx, {
@@ -107,11 +109,12 @@ export async function verifyEmail(
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
+  requireMatchingTokenEmail(user, token.email);
 
-  const updatedUser = await ctx.storage.updateUser(user.id, {
+  const updatedUser = requireTokenUser(await ctx.storage.updateUser(user.id, {
     emailVerifiedAt: new Date(),
     updatedAt: new Date()
-  });
+  }));
 
   await audit(ctx, {
     eventType: "email.verified",
@@ -120,7 +123,7 @@ export async function verifyEmail(
     context: input.request
   });
 
-  return updatedUser ?? user;
+  return updatedUser;
 }
 
 export async function requestPasswordReset(
@@ -150,12 +153,13 @@ export async function resetPassword(
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
+  requireMatchingTokenEmail(user, token.email);
 
   const passwordHash = await hashPasswordInput(ctx, input.newPassword);
-  const updatedUser = await ctx.storage.updateUser(user.id, {
+  const updatedUser = requireTokenUser(await ctx.storage.updateUser(user.id, {
     passwordHash,
     updatedAt: new Date()
-  });
+  }));
   await revokeAllSessionsForUser(ctx, user.id, "password_reset");
 
   await audit(ctx, {
@@ -165,5 +169,22 @@ export async function resetPassword(
     context: input.request
   });
 
-  return updatedUser ?? user;
+  return updatedUser;
+}
+
+function requireMatchingTokenEmail(user: User, tokenEmail: string | null): void {
+  if (
+    !tokenEmail ||
+    !user.email ||
+    normalizeEmail(user.email) !== normalizeEmail(tokenEmail)
+  ) {
+    throw new AuthError("invalid_token", "Invalid token", 401);
+  }
+}
+
+function requireTokenUser(user: User | null): User {
+  if (!user) {
+    throw new AuthError("invalid_token", "Invalid token", 401);
+  }
+  return user;
 }

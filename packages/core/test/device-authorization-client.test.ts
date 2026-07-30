@@ -3,6 +3,7 @@ import {
   createDeviceFlowClient,
   DeviceFlowClientError
 } from "../src/device-authorization.js";
+import { generateDpopKeyPair } from "../src/dpop.js";
 
 describe("device authorization client", () => {
   afterEach(() => {
@@ -119,4 +120,54 @@ describe("device authorization client", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await rejection;
   });
+
+  it.each([
+    {
+      name: "Bearer response for a DPoP-bound flow",
+      dpopBound: true,
+      tokenType: "bearer"
+    },
+    {
+      name: "DPoP response for an unbound flow",
+      dpopBound: false,
+      tokenType: "dpop"
+    }
+  ] as const)("rejects a mismatched token type: $name", async ({
+    dpopBound,
+    tokenType
+  }) => {
+    const dpopKeyPair = dpopBound ? await generateDpopKeyPair() : undefined;
+    vi.useFakeTimers();
+    const client = createDeviceFlowClient({
+      deviceAuthorizationEndpoint: "https://auth.example.com/oauth/device/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      clientId: "oa_client_example",
+      dpopKeyPair,
+      fetch: async () => Response.json({
+        token_type: tokenType,
+        access_token: "oa_at_example",
+        expires_in: 300
+      })
+    });
+    const result = client.poll({
+      authorization: deviceAuthorization()
+    });
+    const rejection = expect(result).rejects.toMatchObject({
+      code: "invalid_response"
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rejection;
+  });
 });
+
+function deviceAuthorization() {
+  return {
+    deviceCode: "oa_dc_example",
+    userCode: "BCDF-GHJK",
+    verificationUri: "https://auth.example.com/device",
+    scopes: ["openid"],
+    expiresAt: new Date(Date.now() + 10_000),
+    intervalSeconds: 1
+  };
+}

@@ -103,20 +103,7 @@ export async function verifyApiKey(
     throw new AuthError("api_key_expired", "API key has expired", 401);
   }
 
-  let organisation: Organisation | null = null;
-  if (apiKey.organisationId) {
-    organisation = await ctx.storage.getOrganisationById(apiKey.organisationId);
-    if (!organisation || organisation.disabledAt) {
-      throw revokedApiKeyError();
-    }
-  }
-
-  const user = apiKey.userId === null
-    ? null
-    : await ctx.storage.getUserById(apiKey.userId);
-  if (apiKey.userId !== null && (!user || user.disabledAt)) {
-    throw revokedApiKeyError();
-  }
+  await requireActiveApiKeySubjects(ctx, apiKey);
 
   const hasAllScopes = requiredScopes.every(
     (scope) => apiKey.scopes.includes("*") || apiKey.scopes.includes(scope)
@@ -129,19 +116,26 @@ export async function verifyApiKey(
   const updatedApiKey = await ctx.storage.updateApiKey(apiKey.id, {
     lastUsedAt: new Date()
   });
-  const activeApiKey = updatedApiKey ?? apiKey;
+  if (!updatedApiKey || updatedApiKey.status === "revoked" || updatedApiKey.revokedAt) {
+    throw revokedApiKeyError();
+  }
+  if (updatedApiKey.expiresAt && isExpired(updatedApiKey.expiresAt)) {
+    throw new AuthError("api_key_expired", "API key has expired", 401);
+  }
+
+  const { organisation, user } = await requireActiveApiKeySubjects(ctx, updatedApiKey);
 
   await audit(ctx, {
     eventType: "api_key.used",
-    actorUserId: activeApiKey.userId,
-    targetUserId: activeApiKey.userId,
-    organisationId: activeApiKey.organisationId,
-    apiKeyId: activeApiKey.id,
+    actorUserId: updatedApiKey.userId,
+    targetUserId: updatedApiKey.userId,
+    organisationId: updatedApiKey.organisationId,
+    apiKeyId: updatedApiKey.id,
     metadata: { requiredScopes }
   });
 
   return {
-    apiKey: apiKeyDetails(activeApiKey),
+    apiKey: apiKeyDetails(updatedApiKey),
     user,
     organisation
   };
@@ -175,7 +169,10 @@ export async function revokeApiKey(
     revokedAt: new Date(),
     revokedBy: input.actorUserId
   });
-  apiKey = updatedApiKey ?? apiKey;
+  if (!updatedApiKey) {
+    throw new AuthError("api_key_invalid", "Invalid API key", 404);
+  }
+  apiKey = updatedApiKey;
 
   await audit(ctx, {
     eventType: "api_key.revoked",
@@ -211,6 +208,27 @@ export async function listApiKeys(
 
 function revokedApiKeyError(): AuthError {
   return new AuthError("api_key_revoked", "API key has been revoked", 401);
+}
+
+async function requireActiveApiKeySubjects(
+  ctx: AuthEngineContext,
+  apiKey: Pick<ApiKey, "organisationId" | "userId">
+): Promise<{ organisation: Organisation | null; user: VerifiedApiKey["user"] }> {
+  const organisation = apiKey.organisationId
+    ? await ctx.storage.getOrganisationById(apiKey.organisationId)
+    : null;
+  if (apiKey.organisationId && (!organisation || organisation.disabledAt)) {
+    throw revokedApiKeyError();
+  }
+
+  const user = apiKey.userId === null
+    ? null
+    : await ctx.storage.getUserById(apiKey.userId);
+  if (apiKey.userId !== null && (!user || user.disabledAt)) {
+    throw revokedApiKeyError();
+  }
+
+  return { organisation, user };
 }
 
 function apiKeyDetails(apiKey: ApiKey): ApiKeyDetails {

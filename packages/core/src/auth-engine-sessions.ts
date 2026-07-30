@@ -30,18 +30,27 @@ export async function getCurrentSession(
     return null;
   }
 
-  const user = await ctx.storage.getUserById(session.userId);
-  if (!user || user.disabledAt) {
-    return null;
-  }
-
   const updatedSession = await ctx.storage.updateSession(session.id, {
     lastActiveAt: now,
     idleExpiresAt: new Date(now.getTime() + ctx.sessionIdleTtlMs)
   });
 
+  if (
+    !updatedSession ||
+    updatedSession.revokedAt ||
+    isExpired(updatedSession.expiresAt, now) ||
+    isExpired(updatedSession.idleExpiresAt, now)
+  ) {
+    return null;
+  }
+
+  const user = await ctx.storage.getUserById(updatedSession.userId);
+  if (!user || user.disabledAt) {
+    return null;
+  }
+
   return {
-    session: updatedSession ?? session,
+    session: updatedSession,
     user
   };
 }
@@ -72,10 +81,13 @@ export async function signOut(
   }
 
   const now = new Date();
-  await ctx.storage.updateSession(session.id, {
+  const revoked = await ctx.storage.updateSession(session.id, {
     revokedAt: now,
     revokeReason: "user_logout"
   });
+  if (!revoked?.revokedAt) {
+    return;
+  }
   await audit(ctx, {
     eventType: "user.signed_out",
     actorUserId: session.userId,
@@ -200,8 +212,13 @@ async function revokeSessions(
 
   for (const session of sessions) {
     if (!session.revokedAt && include(session)) {
-      await ctx.storage.updateSession(session.id, { revokedAt, revokeReason: reason });
-      revoked += 1;
+      const updated = await ctx.storage.updateSession(session.id, {
+        revokedAt,
+        revokeReason: reason
+      });
+      if (updated?.revokedAt) {
+        revoked += 1;
+      }
     }
   }
 

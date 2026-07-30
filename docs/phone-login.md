@@ -122,7 +122,7 @@ const auth = createOwnAuth({
 });
 ```
 
-Without a configured provider, Own Auth uses `ConsoleSmsProvider` for local development. It records the delivery event but does not send a text message.
+Without a configured provider, Own Auth uses `ConsoleSmsProvider` for local development. It records the delivery event but does not send a text message. In production, sending a code without a configured provider fails.
 
 ## How codes are stored
 

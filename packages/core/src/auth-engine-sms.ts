@@ -1,12 +1,14 @@
 import { AuthError } from "./errors.js";
 import { createId, randomNumericCode, safeEqual } from "./crypto.js";
-import { isExpired, normalizePhone } from "./normalise.js";
+import { isExpired } from "./normalise.js";
 import { minute, type DeliveryResult, type RequestSmsOtpInput, type SmsOtpVerificationResult, type VerifySmsOtpInput } from "./auth-engine-types.js";
+import type { SmsOtpPurpose, User } from "./types.js";
 import {
   assertUserEnabled,
   audit,
   hash,
   rateLimit,
+  requireValidPhone,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
@@ -17,13 +19,34 @@ export async function requestSmsOtp(
   ctx: AuthEngineContext,
   input: RequestSmsOtpInput
 ): Promise<DeliveryResult> {
-  const purpose = input.purpose ?? "phone_login";
-  const phone = normalizePhone(input.phone);
+  const purpose = requireSmsPurpose(input.purpose);
+  const phone = requireValidPhone(input.phone);
   await rateLimit(ctx, `sms-${purpose}`, phone, 5, 15 * minute);
 
-  const user = input.userId
-    ? await ctx.storage.getUserById(input.userId)
-    : await ctx.storage.getUserByPhone(phone);
+  let user: User | null;
+  if (purpose === "phone_verification") {
+    if (!input.userId) {
+      throw new AuthError(
+        "validation_error",
+        "userId is required for phone verification",
+        400
+      );
+    }
+    user = await ctx.storage.getUserById(input.userId);
+    if (!user) {
+      throw new AuthError("user_not_found", "User not found", 404);
+    }
+    assertUserEnabled(user);
+  } else {
+    if (input.userId !== undefined) {
+      throw new AuthError(
+        "validation_error",
+        "userId is only allowed for phone verification",
+        400
+      );
+    }
+    user = await ctx.storage.getUserByPhone(phone);
+  }
   const code = randomNumericCode(ctx.smsCodeLength);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ctx.smsOtpTtlMs);
@@ -69,8 +92,8 @@ export async function verifySmsOtp(
   ctx: AuthEngineContext,
   input: VerifySmsOtpInput
 ): Promise<SmsOtpVerificationResult> {
-  const purpose = input.purpose ?? "phone_login";
-  const phone = normalizePhone(input.phone);
+  const purpose = requireSmsPurpose(input.purpose);
+  const phone = requireValidPhone(input.phone);
   await rateLimit(ctx, `sms-verify-${purpose}`, phone, 10, 15 * minute);
 
   const otp = await ctx.storage.getLatestSmsOtp(phone, purpose);
@@ -107,14 +130,25 @@ export async function verifySmsOtp(
   if (!user) {
     throw new AuthError("user_not_found", "User not found", 404);
   }
+  if (
+    otp.userId &&
+    purpose !== "phone_verification" &&
+    user.phone !== phone
+  ) {
+    throw new AuthError("invalid_otp", "Invalid or expired code", 401);
+  }
 
   assertUserEnabled(user);
 
-  user = (await ctx.storage.updateUser(user.id, {
+  const updatedUser = await ctx.storage.updateUser(user.id, {
     phone,
     phoneVerifiedAt: new Date(),
     updatedAt: new Date()
-  })) ?? user;
+  });
+  if (!updatedUser) {
+    throw new AuthError("user_not_found", "User not found", 404);
+  }
+  user = updatedUser;
 
   await audit(ctx, {
     eventType: "sms_otp.verified",
@@ -135,4 +169,16 @@ export async function verifySmsOtp(
   }
 
   return completeFirstFactor(ctx, user, "phone", input.request);
+}
+
+function requireSmsPurpose(value: SmsOtpPurpose | undefined): SmsOtpPurpose {
+  const purpose = value ?? "phone_login";
+  if (
+    purpose !== "phone_login" &&
+    purpose !== "phone_verification" &&
+    purpose !== "account_recovery"
+  ) {
+    throw new AuthError("validation_error", "SMS purpose is invalid", 400);
+  }
+  return purpose;
 }

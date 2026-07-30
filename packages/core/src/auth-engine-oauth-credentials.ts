@@ -24,7 +24,7 @@ export async function getExternalAccessToken(
   const encryption = requireEncryptionKeyRing(ctx.encryption, "OAuth offline access");
   const encryptionMetadata = oauthRefreshEncryptionMetadata(account);
   const provider = requireOAuthProvider(ctx.oauthProviders, input.provider);
-  const refresh = provider.refresh;
+  const refresh = provider.refresh?.bind(provider);
   if (!refresh) {
     throw new AuthError("validation_error", "This OAuth provider cannot refresh access", 400);
   }
@@ -94,7 +94,7 @@ export async function revokeExternalProviderAccess(
   const encryption = requireEncryptionKeyRing(ctx.encryption, "OAuth offline access");
   const encryptionMetadata = oauthRefreshEncryptionMetadata(account);
   const provider = requireOAuthProvider(ctx.oauthProviders, input.provider);
-  const revoke = provider.revoke;
+  const revoke = provider.revoke?.bind(provider);
   if (revoke) {
     const decrypted = await encryption.decrypt(
       {
@@ -109,7 +109,9 @@ export async function revokeExternalProviderAccess(
       revoke(decrypted.plaintext)
     );
   }
-  await ctx.storage.deleteOAuthCredentialByAccountId(account.id);
+  if (!await ctx.storage.deleteOAuthCredentialByAccountId(account.id)) {
+    throw missingCredential();
+  }
   await audit(ctx, {
     eventType: "oauth.credential_revoked",
     actorUserId: input.actorUserId,

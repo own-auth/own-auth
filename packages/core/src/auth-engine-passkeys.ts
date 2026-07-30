@@ -23,14 +23,15 @@ import type {
 import {
   audit,
   auditSignedIn,
+  createAuditEvent,
   createSession,
-  hasRemainingAuthenticationMethod,
   hash,
   markUserLoggedIn,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { finishVerifiedMfa, requireMfaChallenge } from "./auth-engine-mfa.js";
 import { requireCurrentSession } from "./auth-engine-sessions.js";
+import { prepareAuthEventWrite } from "./webhook-outbox.js";
 
 export async function beginPasskeyRegistration(
   ctx: AuthEngineContext,
@@ -97,7 +98,10 @@ export async function completePasskeyRegistration(
   const discoverable = Boolean(
     (input.response.clientExtensionResults as { credProps?: { rk?: boolean } }).credProps?.rk
   );
-  const credential = await ctx.storage.createPasskeyCredential({
+  if (await ctx.storage.getPasskeyCredentialByCredentialId(info.credential.id)) {
+    throw invalidPasskey();
+  }
+  const candidate = {
     id: createId("psk"),
     userId: user.id,
     credentialId: info.credential.id,
@@ -112,7 +116,16 @@ export async function completePasskeyRegistration(
     createdAt: now,
     updatedAt: now,
     lastUsedAt: null
-  });
+  };
+  let credential: PasskeyCredential;
+  try {
+    credential = await ctx.storage.createPasskeyCredential(candidate);
+  } catch (error) {
+    if (await ctx.storage.getPasskeyCredentialByCredentialId(info.credential.id)) {
+      throw invalidPasskey();
+    }
+    throw error;
+  }
   await audit(ctx, {
     eventType: "passkey.registered",
     actorUserId: user.id,
@@ -256,21 +269,28 @@ export async function revokePasskey(
 ): Promise<void> {
   const { user } = await requireCurrentSession(ctx, input.sessionToken);
   const credential = await requireOwnedPasskey(ctx, input.passkeyId, user.id);
-  if (!await hasRemainingAuthenticationMethod(ctx, user, { passkeyId: credential.id })) {
+  const removed = await ctx.storage.removeAuthenticationMethodAtomically({
+    operationId: createId("op"),
+    userId: user.id,
+    method: { kind: "passkey", id: credential.id },
+    event: prepareAuthEventWrite(ctx, createAuditEvent({
+      eventType: "passkey.revoked",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      request: input.request,
+      metadata: { passkeyId: credential.id }
+    }))
+  });
+  if (removed === "last_method") {
     throw new AuthError(
       "authentication_method_required",
       "Add another sign-in method before revoking this passkey",
       409
     );
   }
-  await ctx.storage.deletePasskeyCredential(credential.id);
-  await audit(ctx, {
-    eventType: "passkey.revoked",
-    actorUserId: user.id,
-    targetUserId: user.id,
-    context: input.request,
-    metadata: { passkeyId: credential.id }
-  });
+  if (removed === "not_found") {
+    throw notFound();
+  }
 }
 
 async function storeChallenge(
@@ -318,7 +338,13 @@ async function updateCounter(
 ): Promise<void> {
   const now = new Date();
   if (credential.counter === 0 && nextCounter === 0 && credential.deviceType === "multiDevice") {
-    await ctx.storage.updatePasskeyCredential(credential.id, { lastUsedAt: now, updatedAt: now });
+    const updated = await ctx.storage.updatePasskeyCredential(credential.id, {
+      lastUsedAt: now,
+      updatedAt: now
+    });
+    if (!updated) {
+      throw invalidPasskey();
+    }
     return;
   }
   if (credential.counter === 0 && nextCounter === 0) {

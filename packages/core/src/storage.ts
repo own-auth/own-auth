@@ -20,6 +20,13 @@ import type {
   TotpFactor,
   WebAuthnChallenge
 } from "./identity-types.js";
+import type {
+  AtomicAuthenticationMethodRemovalInput,
+  AtomicAuthenticationMethodRemovalResult,
+  AtomicInvitationAcceptanceInput,
+  AtomicInvitationAcceptanceResult,
+  AtomicInvitationRevocationInput
+} from "./auth-storage-atomic.js";
 
 export interface AuditEventFilter {
   userId?: string;
@@ -113,6 +120,22 @@ export interface AuthStorage {
     organisationId: string,
     email: string
   ): Promise<Invitation<string> | null>;
+  /** Atomically consumes an invitation token, activates membership, and records the event. */
+  acceptInvitationAtomically(
+    input: AtomicInvitationAcceptanceInput
+  ): Promise<AtomicInvitationAcceptanceResult | null>;
+  /** Atomically revokes a pending invitation, consumes its token, and records the event. */
+  revokeInvitationAtomically(
+    input: AtomicInvitationRevocationInput
+  ): Promise<Invitation<string> | null>;
+
+  /**
+   * Atomically removes an account or passkey only when another usable
+   * authentication method remains for the user.
+   */
+  removeAuthenticationMethodAtomically(
+    input: AtomicAuthenticationMethodRemovalInput
+  ): Promise<AtomicAuthenticationMethodRemovalResult>;
 
   createAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   listAuditEvents(filter?: AuditEventFilter): Promise<AuditEvent[]>;

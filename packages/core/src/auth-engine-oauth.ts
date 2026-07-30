@@ -209,7 +209,7 @@ export async function signInWithGoogleOneTap(
   input: GoogleOneTapInput
 ): Promise<OAuthCompletionResult> {
   const provider = requireOAuthProvider(ctx.oauthProviders, "google");
-  const verifyCredential = provider.verifyCredential;
+  const verifyCredential = provider.verifyCredential?.bind(provider);
   if (!verifyCredential) {
     throw new AuthError("validation_error", "Google One Tap is not configured", 400);
   }

@@ -4,7 +4,7 @@ import {
   passwordNeedsRehash,
   verifyPassword
 } from "./crypto.js";
-import { normalizeEmail, normalizePhone } from "./normalise.js";
+import { normalizeEmail } from "./normalise.js";
 import type { RequestContext, User } from "./types.js";
 import {
   minute,
@@ -22,6 +22,8 @@ import {
   audit,
   hashPasswordInput,
   rateLimit,
+  requireValidEmail,
+  requireValidPhone,
   userFor,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
@@ -33,8 +35,8 @@ import {
 } from "./auth-engine-sessions.js";
 
 export async function createUser(ctx: AuthEngineContext, input: CreateUserInput): Promise<User> {
-  const email = input.email ? normalizeEmail(input.email) : null;
-  const phone = input.phone ? normalizePhone(input.phone) : null;
+  const email = input.email === undefined ? null : requireValidEmail(input.email);
+  const phone = input.phone === undefined ? null : requireValidPhone(input.phone);
 
   if (email && (await ctx.storage.getUserByEmail(email))) {
     throw new AuthError("email_already_exists", "A user already exists with that email", 409);
@@ -45,7 +47,9 @@ export async function createUser(ctx: AuthEngineContext, input: CreateUserInput)
   }
 
   const now = new Date();
-  const passwordHash = input.password ? await hashPasswordInput(ctx, input.password) : null;
+  const passwordHash = input.password === undefined
+    ? null
+    : await hashPasswordInput(ctx, input.password);
   const user = await ctx.storage.createUser(
     userFor({
       email,
@@ -125,10 +129,14 @@ export async function signInEmailPassword(
 
   let authenticatedUser = user;
   if (passwordNeedsRehash(user.passwordHash)) {
-    authenticatedUser = (await ctx.storage.updateUser(user.id, {
+    const rehashedUser = await ctx.storage.updateUser(user.id, {
       passwordHash: await hashPassword(input.password),
       updatedAt: new Date()
-    })) ?? user;
+    });
+    if (!rehashedUser) {
+      throw new AuthError("invalid_credentials", "Invalid email or password", 401);
+    }
+    authenticatedUser = rehashedUser;
   }
 
   return completeFirstFactor(ctx, authenticatedUser, "password", input.request);
@@ -154,6 +162,9 @@ export async function changePassword(
     passwordHash: await hashPasswordInput(ctx, input.newPassword),
     updatedAt: new Date()
   });
+  if (!updatedUser) {
+    throw new AuthError("invalid_session", "Invalid or expired session", 401);
+  }
 
   await revokeOtherSessions(
     ctx,
@@ -169,7 +180,7 @@ export async function changePassword(
     context: input.request
   });
 
-  return updatedUser ?? user;
+  return updatedUser;
 }
 
 export async function disableUser(ctx: AuthEngineContext, input: UserStatusInput): Promise<User> {
