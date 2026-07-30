@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.7
+
 ### Breaking changes
 
 - Custom `AuthStorage` adapters must implement atomic invitation acceptance, invitation revocation, and authentication-method removal.
