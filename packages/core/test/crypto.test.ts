@@ -9,6 +9,7 @@ import {
   passwordNeedsRehash,
   verifyPassword
 } from "../src/crypto.js";
+import { createPbkdf2PasswordHasher } from "../src/password-hashing.js";
 import {
   legacyScryptHash,
   nativeArgon2idHash
@@ -146,5 +147,25 @@ describe("hashPassword / verifyPassword", () => {
 
     await expect(hashPassword(oversized)).rejects.toThrow("Password input is too long.");
     await expect(verifyPassword(oversized, nativeArgon2idHash)).resolves.toBe(false);
+  });
+});
+
+describe("createPbkdf2PasswordHasher", () => {
+  const hasher = createPbkdf2PasswordHasher();
+
+  it("uses native Web Crypto PBKDF2 with the current work factor", async () => {
+    const hash = await hasher.hash("worker-password");
+
+    expect(hash).toMatch(/^pbkdf2-sha256\$600000\$/);
+    expect(await hasher.verify("worker-password", hash)).toBe(true);
+    expect(await hasher.verify("wrong-password", hash)).toBe(false);
+    expect(hasher.needsRehash(hash)).toBe(false);
+    expect(await verifyPassword("worker-password", hash)).toBe(true);
+    expect(passwordNeedsRehash(hash)).toBe(false);
+  });
+
+  it("accepts existing Argon2id hashes and marks them for migration", async () => {
+    expect(await hasher.verify("worker-compatible-password", nativeArgon2idHash)).toBe(true);
+    expect(hasher.needsRehash(nativeArgon2idHash)).toBe(true);
   });
 });

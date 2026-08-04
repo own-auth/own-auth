@@ -9,6 +9,7 @@ import {
   handleSamlEngineQualification,
   handleWebhookFlow,
   handleInspection,
+  handlePasswordHashing,
   handleRateLimitRpc,
   handleSamlStorageRpc,
   handleSchemaInspection,
@@ -61,6 +62,8 @@ export default {
           return await handleWebhookVerification(request);
         case "/conformance/webhook-flow":
           return await handleWebhookFlow(env.DB);
+        case "/conformance/password-hashing":
+          return await handlePasswordHashing(env.DB);
         default:
           return new Response("Not found", { status: 404 });
       }

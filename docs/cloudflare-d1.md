@@ -44,7 +44,10 @@ Wrangler owns migration tracking and applies each migration transactionally. Own
 Pass the Worker's D1 binding to `createD1Persistence`:
 
 ```ts auth.ts
-import { createOwnAuth } from "own-auth";
+import {
+  createOwnAuth,
+  createPbkdf2PasswordHasher,
+} from "own-auth";
 import {
   createD1Persistence,
   type D1DatabaseLike,
@@ -59,6 +62,9 @@ export function createAuth(env: Env) {
   return createOwnAuth({
     ...createD1Persistence(env.DB),
     tokenPepper: env.OWN_AUTH_TOKEN_PEPPER,
+    password: {
+      hasher: createPbkdf2PasswordHasher(),
+    },
   });
 }
 ```
@@ -66,6 +72,10 @@ export function createAuth(env: Env) {
 `createD1Persistence` supplies both `storage` and `rateLimitStore`, so authentication data and rate-limit counters use the same D1 database.
 
 Cloudflare owns the D1 binding lifecycle. `auth.close()` has nothing to close when the application supplies D1 persistence.
+
+The configured hasher uses PBKDF2-HMAC-SHA256 through native Web Crypto instead of running Own Auth's default JavaScript Argon2id implementation against the Worker's request CPU budget.
+
+Existing Argon2id and scrypt hashes remain readable and are replaced with PBKDF2 after a successful sign in, but their first verification still runs the original algorithm. Reset existing passwords before moving entirely to a Worker that cannot complete that verification within its CPU limit.
 
 ## Use from a Worker
 
@@ -91,4 +101,4 @@ Configured plugins must provide D1 SQL. Migration generation fails before deploy
 
 ## Storage format
 
-The D1 adapter uses the same public Own Auth types, methods, Argon2id password format, and security parameters as Postgres. Internally, dates are stored as Unix milliseconds, booleans as `0` or `1`, JSON and string arrays as text, and passkey public keys as blobs. Conversion happens inside the adapter.
+The D1 adapter uses the same public Own Auth types and methods as Postgres. Internally, dates are stored as Unix milliseconds, booleans as `0` or `1`, JSON and string arrays as text, and passkey public keys as blobs. Conversion happens inside the adapter.

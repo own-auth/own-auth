@@ -1,9 +1,4 @@
 import { AuthError } from "./errors.js";
-import {
-  hashPassword,
-  passwordNeedsRehash,
-  verifyPassword
-} from "./crypto.js";
 import { normalizeEmail } from "./normalise.js";
 import type { RequestContext, User } from "./types.js";
 import {
@@ -123,14 +118,14 @@ export async function signInEmailPassword(
 
   assertUserEnabled(user);
 
-  if (!(await verifyPassword(input.password, user.passwordHash))) {
+  if (!(await ctx.passwordHasher.verify(input.password, user.passwordHash))) {
     throw new AuthError("invalid_credentials", "Invalid email or password", 401);
   }
 
   let authenticatedUser = user;
-  if (passwordNeedsRehash(user.passwordHash)) {
+  if (ctx.passwordHasher.needsRehash(user.passwordHash)) {
     const rehashedUser = await ctx.storage.updateUser(user.id, {
-      passwordHash: await hashPassword(input.password),
+      passwordHash: await ctx.passwordHasher.hash(input.password),
       updatedAt: new Date()
     });
     if (!rehashedUser) {
@@ -154,7 +149,7 @@ export async function changePassword(
     throw new AuthError("invalid_credentials", "Invalid current password", 401);
   }
 
-  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+  if (!(await ctx.passwordHasher.verify(input.currentPassword, user.passwordHash))) {
     throw new AuthError("invalid_credentials", "Invalid current password", 401);
   }
 

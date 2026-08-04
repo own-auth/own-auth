@@ -12,7 +12,7 @@ Own Auth stores authentication data in Postgres by default. Cloudflare Workers c
 
 **API keys** - Let your users create API keys to access your product programmatically. Keys are shown once, stored hashed, scoped, and revocable.
 
-**Security defaults** - Passwords are hashed with Argon2id. Legacy scrypt hashes are upgraded after a successful sign in. Tokens are single-use and expiring. Sensitive auth actions are rate limited. Security-sensitive auth events are recorded in audit logs. You do not configure these: they work by default.
+**Security defaults** - Passwords use Argon2id by default. Existing scrypt hashes are upgraded after a successful sign in. Tokens are single-use and expiring. Sensitive auth actions are rate limited. Security-sensitive auth events are recorded in audit logs. You do not configure these: they work by default.
 
 ## What this is not
 

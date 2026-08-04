@@ -148,8 +148,9 @@ It is required in production and must contain at least 32 bytes. Generate it onc
 |---|---|---|---|
 | `minLength` | `number` | `8` | Minimum password length. |
 | `maxLength` | `number` | `128` | Maximum password length accepted for new passwords. |
+| `hasher` | `PasswordHasher` | Argon2id | Optional application-owned password hashing implementation. |
 
-New passwords are hashed with Argon2id. Existing scrypt hashes remain valid and are upgraded to Argon2id after a successful sign in. The hashing algorithm is not configurable.
+Argon2id is the default in every runtime. Applications with a constrained runtime can explicitly use `createPbkdf2PasswordHasher()` or provide another `PasswordHasher`. Current Argon2id and PBKDF2 hashes remain valid when switching between the built-in implementations.
 
 ### Magic links
 

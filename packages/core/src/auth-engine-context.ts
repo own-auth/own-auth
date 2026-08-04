@@ -58,6 +58,8 @@ import {
   isDeviceAuthorizationCapableStorage,
   type DeviceAuthorizationStorage
 } from "./authorization-server-device-storage.js";
+import { argon2idPasswordHasher } from "./password-hashing.js";
+import type { PasswordHasher } from "./password-hasher.js";
 
 export interface AuthEngineContext {
   storage: AuthStorage;
@@ -78,6 +80,7 @@ export interface AuthEngineContext {
   smsCodeLength: number;
   passwordMinLength: number;
   passwordMaxLength: number;
+  passwordHasher: PasswordHasher;
   encryption: EncryptionKeyRing | null;
   oauthProviders: ReadonlyMap<ExternalAccountProvider, OAuthProviderAdapter>;
   oauthAccountLinking: OAuthAccountLinking;
@@ -240,6 +243,7 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     ),
     passwordMinLength: password.minLength,
     passwordMaxLength: password.maxLength,
+    passwordHasher: password.hasher,
     encryption,
     oauthProviders,
     oauthAccountLinking: options.oauth?.accountLinking ?? "explicit",
@@ -349,6 +353,7 @@ function normalizeTokenTtls(options: TokenTtlConfig | undefined): Required<Token
 function normalizePasswordOptions(options: OwnAuthOptions["password"]): {
   minLength: number;
   maxLength: number;
+  hasher: PasswordHasher;
 } {
   const minLength = boundedInteger(options?.minLength ?? 8, 8, 1_024, "password.minLength");
   const maxLength = boundedInteger(
@@ -360,7 +365,19 @@ function normalizePasswordOptions(options: OwnAuthOptions["password"]): {
   if (minLength > maxLength) {
     throw new Error("password.minLength cannot exceed password.maxLength");
   }
-  return { minLength, maxLength };
+  const hasher = options?.hasher ?? argon2idPasswordHasher;
+  if (
+    typeof hasher.hash !== "function" ||
+    typeof hasher.verify !== "function" ||
+    typeof hasher.needsRehash !== "function"
+  ) {
+    throw new Error("password.hasher must implement hash, verify, and needsRehash");
+  }
+  return {
+    minLength,
+    maxLength,
+    hasher
+  };
 }
 
 function normalizePasskeyOptions(options?: PasskeyOptions): Required<PasskeyOptions> | null {

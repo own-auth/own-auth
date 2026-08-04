@@ -2,11 +2,11 @@
 
 ## Passwords
 
-Passwords are hashed with **Argon2id**, the winner of the Password Hashing Competition and the recommended algorithm for new projects. It's resistant to GPU attacks, side-channel attacks, and time-memory trade-offs.
+Own Auth uses **Argon2id** by default in every runtime. Applications may explicitly configure PBKDF2-HMAC-SHA256 with 600,000 iterations through native Web Crypto when their runtime cannot run Argon2id within its CPU budget.
 
 Own Auth never stores, logs, or returns plain-text passwords. The raw password exists in memory only during the hash operation and is discarded immediately after.
 
-The hashing algorithm is not configurable. There's no reason to downgrade to bcrypt or scrypt for new projects.
+Every password has a unique random salt, and its stored hash includes the algorithm and work factor. Current Argon2id and PBKDF2 hashes remain verifiable without being repeatedly rewritten. Applications may supply a `PasswordHasher` when hashing is delegated to a dedicated service or runtime capability.
 
 ## Tokens
 

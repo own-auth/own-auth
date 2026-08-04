@@ -12,7 +12,7 @@ const { user, session, sessionToken } = await auth.signUpEmailPassword({
 });
 ```
 
-This creates a user, hashes the password with Argon2id, creates a session, and returns everything needed to sign the user in immediately.
+This creates a user, securely hashes the password, creates a session, and returns everything needed to sign the user in immediately.
 
 Send `sessionToken` to the client securely using an `HttpOnly` cookie, a secure header, or the token handling used by the application.
 
@@ -87,9 +87,23 @@ Own Auth checks the password against the stored hash. If it matches, Own Auth ei
 
 ## Password hashing
 
-Passwords are hashed with Argon2id before storage. This is not configurable. Argon2id is the recommended algorithm for password hashing - it is resistant to GPU attacks, side-channel attacks, and time-memory trade-offs.
+Own Auth uses Argon2id by default. Applications that cannot run Argon2id within their runtime CPU budget can explicitly configure `createPbkdf2PasswordHasher()`. It uses PBKDF2-HMAC-SHA256 through native Web Crypto with 600,000 iterations, a unique 16-byte salt, and a 32-byte hash.
 
 Own Auth never stores, logs, or returns plain-text passwords. It uses the raw password only while creating or verifying the hash and does not persist it.
+
+The stored value identifies the algorithm and work factor. Own Auth can therefore read current Argon2id and PBKDF2 hashes without repeatedly rewriting them. A configured PBKDF2 hasher replaces existing Argon2id and scrypt hashes after a successful sign in.
+
+Applications with a specialized password service can provide a `PasswordHasher`:
+
+```ts
+const auth = createOwnAuth({
+  password: {
+    hasher: myPasswordHasher,
+  },
+});
+```
+
+The hasher must create hashes, verify every stored password format the application still accepts, and report when a hash needs replacing. Own Auth continues to enforce password length before calling it.
 
 ## Changing a password
 

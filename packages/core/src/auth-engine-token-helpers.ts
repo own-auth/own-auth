@@ -1,7 +1,6 @@
 import { AuthError } from "./errors.js";
 import {
   createId,
-  hashPassword,
   hashSecret,
   randomBase64Url
 } from "./crypto.js";
@@ -110,7 +109,7 @@ export async function hashPasswordInput(
     );
   }
 
-  return hashPassword(password);
+  return ctx.passwordHasher.hash(password);
 }
 
 export function hash(ctx: AuthEngineContext, value: string): string {

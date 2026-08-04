@@ -14,6 +14,7 @@ import type { AdministrationOptions } from "./administration.js";
 import type { AuthorizationServerOptions } from "./authorization-server-types.js";
 import type { SamlProvider } from "./saml-types.js";
 import type { ScimOptions } from "./scim-types.js";
+import type { PasswordHasher } from "./password-hasher.js";
 
 export const minute = 60 * 1000;
 export const hour = 60 * minute;
@@ -54,6 +55,7 @@ export interface OwnAuthOptions<
   password?: {
     minLength?: number;
     maxLength?: number;
+    hasher?: PasswordHasher;
   };
   encryption?: EncryptionKeyRingOptions;
   oauth?: OAuthOptions;

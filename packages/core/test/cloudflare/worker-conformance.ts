@@ -1,6 +1,7 @@
 import {
   AuthError,
   createOwnAuth,
+  createPbkdf2PasswordHasher,
   MemoryEmailProvider,
   MemorySmsProvider
 } from "../../dist/index.js";
@@ -281,6 +282,22 @@ export async function handleWebhookFlow(database: D1DatabaseLike): Promise<Respo
   });
 }
 
+export async function handlePasswordHashing(database: D1DatabaseLike): Promise<Response> {
+  const email = `worker-password-${crypto.randomUUID()}@example.com`;
+  const password = "correct-horse";
+  const auth = createWorkerAuth(database);
+  await auth.signUpEmailPassword({ email, password });
+  const row = await database.prepare(
+    "select password_hash from own_auth_users where email = ?"
+  ).bind(email).first<{ password_hash: string }>();
+  const result = await auth.signInEmailPassword({ email, password });
+
+  return Response.json({
+    usesNativeWebCrypto: row?.password_hash.startsWith("pbkdf2-sha256$600000$") === true,
+    signsIn: result.status === "complete"
+  });
+}
+
 export async function handleInspection(
   request: Request,
   database: D1DatabaseLike
@@ -352,6 +369,7 @@ function createWorkerAuth(
     exposeRawTokens: true,
     baseUrl: "http://localhost:3000",
     tokenPepper: "cloudflare-worker-conformance",
+    password: { hasher: createPbkdf2PasswordHasher() },
     encryption: {
       current: { id: "worker-conformance", key: new Uint8Array(32).fill(7) }
     },

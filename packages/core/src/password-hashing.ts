@@ -1,6 +1,17 @@
 import { argon2idAsync } from "@noble/hashes/argon2.js";
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  hashPbkdf2Password,
+  isPbkdf2PasswordHash,
+  pbkdf2PasswordNeedsRehash,
+  verifyPbkdf2Password
+} from "./password-hashing-pbkdf2.js";
+import {
+  assertPasswordInputLength,
+  isPasswordInputTooLong,
+  type PasswordHasher
+} from "./password-hasher.js";
 
 const ARGON2_MEMORY_COST = 19 * 1024;
 const ARGON2_TIME_COST = 2;
@@ -13,8 +24,6 @@ const ARGON2_MAX_TIME_COST = 10;
 const ARGON2_MAX_PARALLELISM = 4;
 const ARGON2_MAX_SALT_LENGTH = 64;
 const ARGON2_MAX_HASH_LENGTH = 64;
-const MAXIMUM_PASSWORD_INPUT_LENGTH = 4_096;
-
 const LEGACY_SCRYPT_VERSION = "scrypt";
 const LEGACY_SCRYPT_N = 16384;
 const LEGACY_SCRYPT_R = 8;
@@ -34,10 +43,24 @@ interface ParsedArgon2idHash extends Omit<Argon2Parameters, "hashLength"> {
   hash: Uint8Array;
 }
 
+export const argon2idPasswordHasher: PasswordHasher = Object.freeze({
+  hash: hashPassword,
+  verify: verifyPassword,
+  needsRehash: passwordNeedsRehash
+});
+
+const pbkdf2PasswordHasher: PasswordHasher = Object.freeze({
+  hash: hashPbkdf2Password,
+  verify: verifyPbkdf2CompatiblePassword,
+  needsRehash: pbkdf2PasswordNeedsRehash
+});
+
+export function createPbkdf2PasswordHasher(): PasswordHasher {
+  return pbkdf2PasswordHasher;
+}
+
 export async function hashPassword(password: string): Promise<string> {
-  if (password.length > MAXIMUM_PASSWORD_INPUT_LENGTH) {
-    throw new Error("Password input is too long.");
-  }
+  assertPasswordInputLength(password);
   const salt = randomBytes(ARGON2_SALT_LENGTH);
   const hash = await deriveArgon2id(password, salt, {
     memoryCost: ARGON2_MEMORY_COST,
@@ -54,8 +77,11 @@ export async function verifyPassword(
   password: string,
   encodedHash: string
 ): Promise<boolean> {
-  if (password.length > MAXIMUM_PASSWORD_INPUT_LENGTH) {
+  if (isPasswordInputTooLong(password)) {
     return false;
+  }
+  if (isPbkdf2PasswordHash(encodedHash)) {
+    return verifyPbkdf2Password(password, encodedHash);
   }
   if (!encodedHash.startsWith("$argon2id$")) {
     return verifyLegacyScryptPassword(password, encodedHash);
@@ -78,6 +104,9 @@ export async function verifyPassword(
 }
 
 export function passwordNeedsRehash(encodedHash: string): boolean {
+  if (isPbkdf2PasswordHash(encodedHash)) {
+    return pbkdf2PasswordNeedsRehash(encodedHash);
+  }
   if (!encodedHash.startsWith("$argon2id$")) {
     return true;
   }
@@ -94,6 +123,16 @@ export function passwordNeedsRehash(encodedHash: string): boolean {
   } catch {
     return true;
   }
+}
+
+async function verifyPbkdf2CompatiblePassword(
+  password: string,
+  encodedHash: string
+): Promise<boolean> {
+  if (!isPbkdf2PasswordHash(encodedHash)) {
+    return verifyPassword(password, encodedHash);
+  }
+  return verifyPbkdf2Password(password, encodedHash);
 }
 
 async function deriveArgon2id(

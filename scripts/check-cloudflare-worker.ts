@@ -68,6 +68,10 @@ try {
   await assertChecks(await postAction(`${origin}/conformance/scim-engine`), "SCIM engine");
   await assertChecks(await postAction(`${origin}/conformance/schema`), "D1 schema");
   await assertChecks(await postAction(`${origin}/conformance/webhook-flow`), "D1 webhook flow");
+  await assertChecks(
+    await postAction(`${origin}/conformance/password-hashing`),
+    "Worker password hashing"
+  );
   await assertAuthorizationRefreshRace(
     createRemoteProxy<AuthStorage>(origin, "storage"),
     createRemoteProxy<AuthorizationServerStorage>(origin, "authorization-storage")

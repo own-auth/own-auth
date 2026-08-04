@@ -811,7 +811,7 @@ See [Observability](https://github.com/own-auth/own-auth/blob/main/docs/observab
 
 ## Security
 
-- New passwords are hashed with Argon2id; legacy scrypt hashes are upgraded after a successful sign in
+- Passwords use Argon2id by default; existing scrypt hashes are upgraded after sign in, and constrained runtimes can configure native Web Crypto PBKDF2
 - Session tokens, magic links, reset tokens, SMS codes, and API keys are hashed before storage
 - Single-use tokens with expiry
 - Atomic OAuth state, One Tap nonce, MFA challenge, recovery-code, and WebAuthn challenge consumption
