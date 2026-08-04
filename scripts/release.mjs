@@ -91,8 +91,19 @@ export function loadReleasePlan(runtime, channel) {
   return validateReleaseFiles({
     changelog: runtime.readText(resolve(rootDir, "CHANGELOG.md")),
     packageName: corePackage.name,
-    packageVersion: corePackage.version
+    packageVersion: corePackage.version,
+    runtimeVersion: readRuntimeVersion(
+      runtime.readText(resolve(packageDir, "src/version.ts"))
+    )
   }, channel);
+}
+
+function readRuntimeVersion(source) {
+  const match = /export const OWN_AUTH_VERSION = "([^"]+)";/.exec(source);
+  if (!match) {
+    throw new Error("Could not read OWN_AUTH_VERSION from packages/core/src/version.ts");
+  }
+  return match[1];
 }
 
 export async function verifyPublication(plan, runtime, options = verificationDefaults) {

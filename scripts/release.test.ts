@@ -45,8 +45,20 @@ describe("release policy", () => {
     expect(() => validateReleaseFiles({
       changelog: "## 0.2.0\n",
       packageName: "own-auth",
-      packageVersion: "0.3.0"
+      packageVersion: "0.3.0",
+      runtimeVersion: "0.3.0"
     }, "stable")).toThrow("CHANGELOG.md is missing ## 0.3.0");
+  });
+
+  it("rejects a runtime version that differs from the package version", () => {
+    expect(() => validateReleaseFiles({
+      changelog: "## 0.3.0\n",
+      packageName: "own-auth",
+      packageVersion: "0.3.0",
+      runtimeVersion: "0.2.9"
+    }, "stable")).toThrow(
+      "OWN_AUTH_VERSION 0.2.9 does not match package version 0.3.0"
+    );
   });
 });
 
@@ -223,6 +235,7 @@ interface FakeRuntimeOptions {
   registryUnavailable?: boolean;
   remoteCommit?: string;
   remoteTagCommit?: string | null;
+  runtimeVersion?: string;
   versions?: string[];
 }
 
@@ -307,6 +320,9 @@ function createFakeRuntime(options: FakeRuntimeOptions = {}) {
     readText(path: string) {
       if (path.endsWith("/packages/core/package.json")) {
         return JSON.stringify({ name: "own-auth", version: packageVersion });
+      }
+      if (path.endsWith("/packages/core/src/version.ts")) {
+        return `export const OWN_AUTH_VERSION = "${options.runtimeVersion ?? packageVersion}";\n`;
       }
       if (path.endsWith("/CHANGELOG.md")) {
         return `# Changelog\n\n## ${baseVersion}\n`;

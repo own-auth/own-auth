@@ -58,9 +58,19 @@ export function inferReleasePlan(version) {
   );
 }
 
-export function validateReleaseFiles({ changelog, packageName, packageVersion }, channel) {
+export function validateReleaseFiles({
+  changelog,
+  packageName,
+  packageVersion,
+  runtimeVersion
+}, channel) {
   if (packageName !== "own-auth") {
     throw new Error(`Expected package name own-auth; received ${packageName}`);
+  }
+  if (runtimeVersion !== packageVersion) {
+    throw new Error(
+      `OWN_AUTH_VERSION ${runtimeVersion} does not match package version ${packageVersion}`
+    );
   }
 
   const plan = channel

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.10
+
+### Fixed
+
+- Synchronized the exported `OWN_AUTH_VERSION` value with the published package version and made release validation reject future version drift.
+
 ## 0.3.9
 
 ### Fixed
