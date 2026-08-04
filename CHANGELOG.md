@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.9
+
 ### Fixed
 
 - Made `createPbkdf2PasswordHasher()` compatible with Cloudflare Workers by defaulting to its 100,000-iteration PBKDF2 limit while allowing stronger work factors on supporting runtimes.
