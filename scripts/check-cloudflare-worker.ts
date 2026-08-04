@@ -48,6 +48,7 @@ const root = new URL("..", import.meta.url);
 const config = "packages/core/test/cloudflare/wrangler.jsonc";
 const database = "own-auth-worker-compatibility";
 const port = 18_787;
+const wranglerPackage = "wrangler@4.110.0";
 const persistenceDirectory = await mkdtemp(join(tmpdir(), "own-auth-d1-"));
 let worker: ChildProcess | undefined;
 const workerOutput: string[] = [];
@@ -317,7 +318,7 @@ async function startWorker(): Promise<ChildProcess> {
 }
 
 function spawnWrangler(args: string[], output: string[] = []): ChildProcess {
-  const child = spawn("pnpm", ["dlx", "wrangler@4.110.0", ...args], {
+  const child = spawn("pnpm", ["dlx", wranglerPackage, ...args], {
     cwd: root,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"]
@@ -342,7 +343,7 @@ async function runWrangler(args: string[]): Promise<void> {
 async function runWranglerCapture(args: string[]): Promise<string> {
   const stdout: string[] = [];
   const stderr: string[] = [];
-  const child = spawn("pnpm", ["dlx", "wrangler@4.110.0", ...args], {
+  const child = spawn("pnpm", ["dlx", wranglerPackage, ...args], {
     cwd: root,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"]

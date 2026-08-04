@@ -66,8 +66,32 @@ jobs:
       - name: Check D1 package resolution
         run: pnpm d1-resolution:check
 
-      - name: Check Cloudflare Workers bundle
-        run: pnpm cloudflare:check
-
       - name: Test
         run: pnpm test
+
+  cloudflare-compatibility:
+    name: Cloudflare compatibility
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.0.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check Cloudflare Workers bundle
+        run: pnpm cloudflare:check
