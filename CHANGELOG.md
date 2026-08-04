@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.8
+
 ### Fixed
 
 - Added a configurable `PasswordHasher` with a native Web Crypto PBKDF2 option for constrained runtimes. Argon2id remains the default, and every password flow uses the configured hasher.
