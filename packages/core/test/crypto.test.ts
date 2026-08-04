@@ -153,15 +153,29 @@ describe("hashPassword / verifyPassword", () => {
 describe("createPbkdf2PasswordHasher", () => {
   const hasher = createPbkdf2PasswordHasher();
 
-  it("uses native Web Crypto PBKDF2 with the current work factor", async () => {
+  it("uses a Cloudflare-compatible Web Crypto PBKDF2 work factor by default", async () => {
     const hash = await hasher.hash("worker-password");
 
-    expect(hash).toMatch(/^pbkdf2-sha256\$600000\$/);
+    expect(hash).toMatch(/^pbkdf2-sha256\$100000\$/);
     expect(await hasher.verify("worker-password", hash)).toBe(true);
     expect(await hasher.verify("wrong-password", hash)).toBe(false);
     expect(hasher.needsRehash(hash)).toBe(false);
     expect(await verifyPassword("worker-password", hash)).toBe(true);
     expect(passwordNeedsRehash(hash)).toBe(false);
+  });
+
+  it("supports stronger work factors without downgrading their hashes", async () => {
+    const strongerHasher = createPbkdf2PasswordHasher({ iterations: 150_000 });
+    const hash = await strongerHasher.hash("stronger-worker-password");
+
+    expect(hash).toMatch(/^pbkdf2-sha256\$150000\$/);
+    expect(strongerHasher.needsRehash(hash)).toBe(false);
+    expect(hasher.needsRehash(hash)).toBe(false);
+  });
+
+  it("rejects unsupported work factors during configuration", () => {
+    expect(() => createPbkdf2PasswordHasher({ iterations: 99_999 }))
+      .toThrow("PBKDF2 iterations must be an integer between 100000 and 2000000.");
   });
 
   it("accepts existing Argon2id hashes and marks them for migration", async () => {

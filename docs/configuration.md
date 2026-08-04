@@ -150,7 +150,7 @@ It is required in production and must contain at least 32 bytes. Generate it onc
 | `maxLength` | `number` | `128` | Maximum password length accepted for new passwords. |
 | `hasher` | `PasswordHasher` | Argon2id | Optional application-owned password hashing implementation. |
 
-Argon2id is the default in every runtime. Applications with a constrained runtime can explicitly use `createPbkdf2PasswordHasher()` or provide another `PasswordHasher`. Current Argon2id and PBKDF2 hashes remain valid when switching between the built-in implementations.
+Argon2id is the default in every runtime. Applications with a constrained runtime can explicitly use `createPbkdf2PasswordHasher()` or provide another `PasswordHasher`. The PBKDF2 helper defaults to the 100,000 iterations supported by Cloudflare Workers. Other runtimes can pass an explicit `iterations` value from 100,000 to 2,000,000. Current Argon2id and PBKDF2 hashes remain valid when switching between the built-in implementations, and stronger PBKDF2 hashes are not downgraded.
 
 ### Magic links
 

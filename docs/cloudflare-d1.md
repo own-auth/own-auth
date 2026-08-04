@@ -69,6 +69,8 @@ export function createAuth(env: Env) {
 }
 ```
 
+The PBKDF2 helper uses 100,000 iterations by default, which is the maximum Cloudflare Workers accepts. Do not pass a higher `iterations` value in a Worker.
+
 `createD1Persistence` supplies both `storage` and `rateLimitStore`, so authentication data and rate-limit counters use the same D1 database.
 
 Cloudflare owns the D1 binding lifecycle. `auth.close()` has nothing to close when the application supplies D1 persistence.

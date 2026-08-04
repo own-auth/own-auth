@@ -9,6 +9,7 @@ import {
   type ApiKey
 } from "../src/index.js";
 import { hashSecret } from "../src/crypto.js";
+import { argon2idPasswordHasher } from "../src/password-hashing.js";
 import { assertSingleSettledWinner } from "./conformance/conformance-assertions.js";
 
 function createHarness(
@@ -616,6 +617,41 @@ describe("OwnAuth security regressions", () => {
         newPassword: "new-password"
       })
     ).rejects.toMatchObject({ code: "expired_token" });
+  });
+
+  it("keeps a password reset token usable when password hashing fails", async () => {
+    let rejectHash = false;
+    const hasher = {
+      ...argon2idPasswordHasher,
+      hash: async (password: string) => {
+        if (rejectHash) throw new Error("Password hashing failed");
+        return argon2idPasswordHasher.hash(password);
+      }
+    };
+    const { auth, emailProvider, storage } = createHarness({
+      password: { hasher }
+    });
+    await auth.signUpEmailPassword({
+      email: "retry-reset@example.com",
+      password: "correct-horse"
+    });
+    await auth.requestPasswordReset({ email: "retry-reset@example.com" });
+    const rawToken = emailProvider.messages.at(-1)?.token ?? "";
+
+    rejectHash = true;
+    await expect(auth.resetPassword({
+      token: rawToken,
+      newPassword: "new-correct-horse"
+    })).rejects.toThrow("Password hashing failed");
+    await expect(
+      storage.getTokenByHash(hashSecret(rawToken), "password_reset")
+    ).resolves.toMatchObject({ usedAt: null });
+
+    rejectHash = false;
+    await expect(auth.resetPassword({
+      token: rawToken,
+      newPassword: "new-correct-horse"
+    })).resolves.toMatchObject({ email: "retry-reset@example.com" });
   });
 
   it("allows only one concurrent password reset", async () => {

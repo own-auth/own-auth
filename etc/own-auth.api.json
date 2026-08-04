@@ -528,6 +528,7 @@
     "OwnAuthSessionCookieOptions",
     "PasskeyCredential",
     "PasswordHasher",
+    "Pbkdf2PasswordHasherOptions",
     "Permission",
     "PluginSessionRequirement",
     "PollDeviceAuthorizationInput",

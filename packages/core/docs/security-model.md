@@ -2,7 +2,7 @@
 
 ## Passwords
 
-Own Auth uses **Argon2id** by default in every runtime. Applications may explicitly configure PBKDF2-HMAC-SHA256 with 600,000 iterations through native Web Crypto when their runtime cannot run Argon2id within its CPU budget.
+Own Auth uses **Argon2id** by default in every runtime. Applications may explicitly configure PBKDF2-HMAC-SHA256 through native Web Crypto when their runtime cannot run Argon2id within its CPU budget. The PBKDF2 helper defaults to 100,000 iterations for Cloudflare Workers compatibility and accepts a higher work factor on runtimes that support it.
 
 Own Auth never stores, logs, or returns plain-text passwords. The raw password exists in memory only during the hash operation and is discarded immediately after.
 

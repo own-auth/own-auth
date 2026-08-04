@@ -5,7 +5,7 @@ import {
 } from "./password-hasher.js";
 
 const VERSION = "pbkdf2-sha256";
-const ITERATIONS = 600_000;
+export const DEFAULT_PBKDF2_ITERATIONS = 100_000;
 const MIN_ITERATIONS = 100_000;
 const MAX_ITERATIONS = 2_000_000;
 const SALT_LENGTH = 16;
@@ -45,11 +45,15 @@ export function isPbkdf2PasswordHash(encodedHash: string): boolean {
   return encodedHash.startsWith(`${VERSION}$`);
 }
 
-export async function hashPbkdf2Password(password: string): Promise<string> {
+export async function hashPbkdf2Password(
+  password: string,
+  iterations = DEFAULT_PBKDF2_ITERATIONS
+): Promise<string> {
+  assertPbkdf2Iterations(iterations);
   assertPasswordInputLength(password);
   const salt = getWebCrypto().getRandomValues(new Uint8Array(SALT_LENGTH));
-  const hash = await derivePbkdf2(password, salt, ITERATIONS, HASH_LENGTH);
-  return `${VERSION}$${ITERATIONS}$${encodeBase64Url(salt)}$${encodeBase64Url(hash)}`;
+  const hash = await derivePbkdf2(password, salt, iterations, HASH_LENGTH);
+  return `${VERSION}$${iterations}$${encodeBase64Url(salt)}$${encodeBase64Url(hash)}`;
 }
 
 export async function verifyPbkdf2Password(
@@ -74,16 +78,28 @@ export async function verifyPbkdf2Password(
   }
 }
 
-export function pbkdf2PasswordNeedsRehash(encodedHash: string): boolean {
+export function pbkdf2PasswordNeedsRehash(
+  encodedHash: string,
+  iterations = DEFAULT_PBKDF2_ITERATIONS
+): boolean {
+  assertPbkdf2Iterations(iterations);
   try {
     const parsed = parsePbkdf2Hash(encodedHash);
     return (
-      parsed.iterations !== ITERATIONS ||
+      parsed.iterations < iterations ||
       parsed.salt.length !== SALT_LENGTH ||
       parsed.hash.length !== HASH_LENGTH
     );
   } catch {
     return true;
+  }
+}
+
+export function assertPbkdf2Iterations(iterations: number): void {
+  if (!isSupportedIterationCount(iterations)) {
+    throw new Error(
+      `PBKDF2 iterations must be an integer between ${MIN_ITERATIONS} and ${MAX_ITERATIONS}.`
+    );
   }
 }
 
@@ -121,8 +137,7 @@ function parsePbkdf2Hash(encodedHash: string): ParsedPbkdf2Hash {
   const salt = decodeBase64Url(saltValue);
   const hash = decodeBase64Url(hashValue);
   if (
-    iterations < MIN_ITERATIONS ||
-    iterations > MAX_ITERATIONS ||
+    !isSupportedIterationCount(iterations) ||
     salt.length < SALT_LENGTH ||
     salt.length > MAX_ENCODED_PART_LENGTH ||
     hash.length < HASH_LENGTH ||
@@ -133,6 +148,14 @@ function parsePbkdf2Hash(encodedHash: string): ParsedPbkdf2Hash {
     throw new Error("Unsupported PBKDF2 parameters.");
   }
   return { iterations, salt, hash };
+}
+
+function isSupportedIterationCount(iterations: number): boolean {
+  return (
+    Number.isSafeInteger(iterations) &&
+    iterations >= MIN_ITERATIONS &&
+    iterations <= MAX_ITERATIONS
+  );
 }
 
 function getWebCrypto(): WebCryptoLike {

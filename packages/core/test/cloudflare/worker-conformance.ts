@@ -293,7 +293,7 @@ export async function handlePasswordHashing(database: D1DatabaseLike): Promise<R
   const result = await auth.signInEmailPassword({ email, password });
 
   return Response.json({
-    usesNativeWebCrypto: row?.password_hash.startsWith("pbkdf2-sha256$600000$") === true,
+    usesNativeWebCrypto: row?.password_hash.startsWith("pbkdf2-sha256$100000$") === true,
     signsIn: result.status === "complete"
   });
 }

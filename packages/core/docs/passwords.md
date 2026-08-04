@@ -87,7 +87,9 @@ Own Auth checks the password against the stored hash. If it matches, Own Auth ei
 
 ## Password hashing
 
-Own Auth uses Argon2id by default. Applications that cannot run Argon2id within their runtime CPU budget can explicitly configure `createPbkdf2PasswordHasher()`. It uses PBKDF2-HMAC-SHA256 through native Web Crypto with 600,000 iterations, a unique 16-byte salt, and a 32-byte hash.
+Own Auth uses Argon2id by default. Applications that cannot run Argon2id within their runtime CPU budget can explicitly configure `createPbkdf2PasswordHasher()`. It uses PBKDF2-HMAC-SHA256 through native Web Crypto with 100,000 iterations by default, a unique 16-byte salt, and a 32-byte hash. This default stays within Cloudflare Workers' PBKDF2 limit.
+
+Runtimes that support a higher work factor can pass `createPbkdf2PasswordHasher({ iterations: 600_000 })`. Supported values range from 100,000 to 2,000,000. Do not configure more than 100,000 iterations on Cloudflare Workers.
 
 Own Auth never stores, logs, or returns plain-text passwords. It uses the raw password only while creating or verifying the hash and does not persist it.
 

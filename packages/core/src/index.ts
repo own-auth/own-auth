@@ -144,6 +144,7 @@ export type {
 } from "./authorization.js";
 export { coreAuditEventTypes } from "./types.js";
 export { createPbkdf2PasswordHasher } from "./password-hashing.js";
+export type { Pbkdf2PasswordHasherOptions } from "./password-hashing.js";
 export type { PasswordHasher } from "./password-hasher.js";
 export type {
   AcceptInviteInput,

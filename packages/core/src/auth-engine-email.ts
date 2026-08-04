@@ -15,6 +15,7 @@ import {
   assertUserEnabled,
   audit,
   consumeToken,
+  getUsableToken,
   hashPasswordInput,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
@@ -147,15 +148,18 @@ export async function resetPassword(
   ctx: AuthEngineContext,
   input: ResetPasswordInput
 ): Promise<User> {
-  const token = await consumeToken(ctx, input.token, "password_reset");
-  const user = token.userId ? await ctx.storage.getUserById(token.userId) : null;
+  const candidate = await getUsableToken(ctx, input.token, "password_reset");
+  const user = candidate.userId
+    ? await ctx.storage.getUserById(candidate.userId)
+    : null;
 
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
-  requireMatchingTokenEmail(user, token.email);
+  requireMatchingTokenEmail(user, candidate.email);
 
   const passwordHash = await hashPasswordInput(ctx, input.newPassword);
+  await consumeToken(ctx, input.token, "password_reset");
   const updatedUser = requireTokenUser(await ctx.storage.updateUser(user.id, {
     passwordHash,
     updatedAt: new Date()

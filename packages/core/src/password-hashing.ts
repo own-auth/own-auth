@@ -2,6 +2,8 @@ import { argon2idAsync } from "@noble/hashes/argon2.js";
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
+  assertPbkdf2Iterations,
+  DEFAULT_PBKDF2_ITERATIONS,
   hashPbkdf2Password,
   isPbkdf2PasswordHash,
   pbkdf2PasswordNeedsRehash,
@@ -49,14 +51,26 @@ export const argon2idPasswordHasher: PasswordHasher = Object.freeze({
   needsRehash: passwordNeedsRehash
 });
 
-const pbkdf2PasswordHasher: PasswordHasher = Object.freeze({
-  hash: hashPbkdf2Password,
-  verify: verifyPbkdf2CompatiblePassword,
-  needsRehash: pbkdf2PasswordNeedsRehash
-});
+export interface Pbkdf2PasswordHasherOptions {
+  iterations?: number;
+}
 
-export function createPbkdf2PasswordHasher(): PasswordHasher {
-  return pbkdf2PasswordHasher;
+export function createPbkdf2PasswordHasher(
+  options: Pbkdf2PasswordHasherOptions = {}
+): PasswordHasher {
+  const iterations = options.iterations ?? DEFAULT_PBKDF2_ITERATIONS;
+  assertPbkdf2Iterations(iterations);
+  const hasher: PasswordHasher = {
+    hash: (password) => hashPbkdf2Password(password, iterations),
+    verify: verifyPbkdf2CompatiblePassword,
+    needsRehash: (encodedHash) => {
+      if (!isPbkdf2PasswordHash(encodedHash)) {
+        return true;
+      }
+      return pbkdf2PasswordNeedsRehash(encodedHash, iterations);
+    }
+  };
+  return Object.freeze(hasher);
 }
 
 export async function hashPassword(password: string): Promise<string> {

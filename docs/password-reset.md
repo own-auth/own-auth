@@ -23,7 +23,7 @@ await auth.resetPassword({
 });
 ```
 
-Own Auth verifies and consumes the token, hashes the new password, updates the user, and revokes every existing session for the account. The user must sign in again with the new password.
+Own Auth validates the token, hashes the new password, atomically consumes the token, updates the user, and revokes every existing session for the account. A validation or hashing failure leaves the token unused so the reset can be retried. The user must sign in again with the new password.
 
 ### Why all sessions are revoked
 

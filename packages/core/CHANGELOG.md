@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Made `createPbkdf2PasswordHasher()` compatible with Cloudflare Workers by defaulting to its 100,000-iteration PBKDF2 limit while allowing stronger work factors on supporting runtimes.
+- Password-reset tokens are no longer consumed when validation or password hashing fails.
+
 ## 0.3.8
 
 ### Fixed
