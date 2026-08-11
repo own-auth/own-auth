@@ -77,6 +77,8 @@ export type AuthErrorCode =
   | "auth_closed"
   | "validation_error";
 
+const authErrorBrand = Symbol.for("own-auth.AuthError");
+
 export class AuthError extends Error {
   readonly code: AuthErrorCode;
   readonly statusCode: number;
@@ -84,15 +86,32 @@ export class AuthError extends Error {
 
   constructor(code: AuthErrorCode, safeMessage: string, statusCode = 400) {
     super(safeMessage);
+    Object.defineProperty(this, authErrorBrand, { value: true });
     this.name = "AuthError";
     this.code = code;
     this.statusCode = statusCode;
     this.safeMessage = safeMessage;
   }
+
+  static [Symbol.hasInstance](value: unknown): boolean {
+    return this === AuthError
+      ? isAuthError(value)
+      : Function.prototype[Symbol.hasInstance].call(this, value);
+  }
+}
+
+export function isAuthError(error: unknown): error is AuthError {
+  if (typeof error !== "object" || error === null) return false;
+
+  const candidate = error as Record<PropertyKey, unknown>;
+  return candidate[authErrorBrand] === true &&
+    typeof candidate.code === "string" &&
+    typeof candidate.statusCode === "number" &&
+    typeof candidate.safeMessage === "string";
 }
 
 export function toAuthError(error: unknown): AuthError {
-  if (error instanceof AuthError) {
+  if (isAuthError(error)) {
     return error;
   }
 

@@ -271,7 +271,7 @@ export type {
   ScimCapableStorage,
   ScimStorage
 } from "./scim-storage.js";
-export { AuthError, toAuthError } from "./errors.js";
+export { AuthError, isAuthError, toAuthError } from "./errors.js";
 export type { AuthErrorCode } from "./errors.js";
 export { EncryptionKeyRing, createEncryptionKeyRing } from "./encryption.js";
 export type {
