@@ -71,7 +71,7 @@ If the token is valid, it is consumed. Own Auth then creates a session or return
 | `disabled_user` | The user has been disabled. |
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   const result = await auth.verifyMagicLink({
@@ -82,7 +82,7 @@ try {
     // Show a second-factor form.
   }
 } catch (error) {
-  if (!(error instanceof AuthError)) {
+  if (!isAuthError(error)) {
     throw error;
   }
 

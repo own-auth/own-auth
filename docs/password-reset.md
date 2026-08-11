@@ -57,7 +57,7 @@ Always return the same message, whether or not the email belongs to a user.
 ### Reset page
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 const { token, newPassword } = req.body;
 
@@ -65,7 +65,7 @@ try {
   await auth.resetPassword({ token, newPassword });
   res.json({ message: "Password updated. Sign in with your new password." });
 } catch (error) {
-  if (!(error instanceof AuthError)) {
+  if (!isAuthError(error)) {
     throw error;
   }
 

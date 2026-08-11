@@ -46,7 +46,7 @@ If the code is valid, Own Auth consumes it and verifies the phone number. It the
 | `disabled_user` | The user has been disabled. |
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   const result = await auth.verifySmsOtp({
@@ -58,7 +58,7 @@ try {
     // Show a second-factor form.
   }
 } catch (error) {
-  if (!(error instanceof AuthError)) {
+  if (!isAuthError(error)) {
     throw error;
   }
 

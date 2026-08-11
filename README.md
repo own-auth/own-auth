@@ -81,7 +81,7 @@ The password is hashed before it is stored. Own Auth never saves plain-text pass
 If the email is already taken, `signUpEmailPassword` throws a typed error you can catch and handle:
 
 ```ts signup.ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   const { user, session, sessionToken } = await auth.signUpEmailPassword({
@@ -90,12 +90,14 @@ try {
     name,
   });
 } catch (error) {
-  if (error instanceof AuthError && error.code === "email_already_exists") {
+  if (isAuthError(error) && error.code === "email_already_exists") {
     // Handle the duplicate email.
   }
   throw error;
 }
 ```
+
+Use `isAuthError()` in catch blocks. It remains reliable when a server bundle contains more than one copy of `own-auth`.
 
 ### Sign In
 

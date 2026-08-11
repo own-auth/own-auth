@@ -34,7 +34,7 @@ Send `sessionToken` to the client securely using an `HttpOnly` cookie, a secure 
 | `rate_limited` | Too many sign-up attempts. |
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   const { user, session, sessionToken } = await auth.signUpEmailPassword({
@@ -43,7 +43,7 @@ try {
     name,
   });
 } catch (error) {
-  if (!(error instanceof AuthError)) {
+  if (!isAuthError(error)) {
     throw error;
   }
 

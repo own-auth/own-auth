@@ -44,12 +44,12 @@ Own Auth throws `AuthError` with:
 - `safeMessage`: `Too many attempts. Try again later.`
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   await auth.signInEmailPassword({ email, password });
 } catch (error) {
-  if (error instanceof AuthError && error.code === "rate_limited") {
+  if (isAuthError(error) && error.code === "rate_limited") {
     return res.status(error.statusCode).json({
       error: error.safeMessage,
     });

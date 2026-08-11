@@ -99,13 +99,13 @@ Own Auth checks the key format, hashes the incoming value, compares the hash, re
 Invalid keys throw `AuthError` rather than returning `null`:
 
 ```ts
-import { AuthError } from "own-auth";
+import { isAuthError } from "own-auth";
 
 try {
   const verified = await auth.verifyApiKey(rawKey);
   // Continue with verified.apiKey, verified.user, or verified.organisation.
 } catch (error) {
-  if (error instanceof AuthError && error.code === "api_key_invalid") {
+  if (isAuthError(error) && error.code === "api_key_invalid") {
     return res.status(401).json({ error: "Invalid API key" });
   }
   throw error;

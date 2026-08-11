@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Added the duplication-safe `isAuthError()` guard and branded `AuthError` instances so expected authentication errors remain identifiable when application bundlers include multiple copies of `own-auth`.
+
 ## 0.3.10
 
 ### Fixed
