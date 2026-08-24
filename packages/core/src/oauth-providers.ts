@@ -1,6 +1,6 @@
 import * as oauth from "oauth4webapi";
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import { resolveFetchImplementation } from "./fetch-implementation.js";
 import { verifyRs256Jwt } from "./oauth-jwt.js";
 import type {
@@ -483,7 +483,7 @@ async function withProviderErrors<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof AuthError) {
+    if (isAuthError(error)) {
       throw error;
     }
     throw new AuthError("oauth_provider_error", "OAuth provider request failed", 401);

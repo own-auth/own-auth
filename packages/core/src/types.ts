@@ -142,6 +142,12 @@ export type AuditEventType = CoreAuditEventType | `plugin.${string}`;
 export interface RequestContext {
   ipAddress?: string;
   userAgent?: string;
+  /** @internal Populated by the HTTP handler for Own Auth Cloud challenges. */
+  cloudChallengeResponse?: string;
+  /** @internal Request path used to bind an Own Auth Cloud challenge. */
+  path?: string;
+  /** @internal Requests a one-time appeal challenge after a Cloud denial. */
+  cloudAppeal?: boolean;
 }
 
 export interface User {

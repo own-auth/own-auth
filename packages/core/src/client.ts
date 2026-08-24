@@ -10,9 +10,11 @@ import {
 } from "./http/contract.js";
 import {
   clientErrorFromUnknown,
-  OwnAuthClientError,
-  requestJson
+  OwnAuthClientError
 } from "./client-error.js";
+import { requestJsonWithCloudChallenge } from "./cloud-challenge-client.js";
+import { isCloudClientManifest } from "./cloud-plugin.js";
+import type { CloudClientOptions } from "./cloud-types.js";
 import {
   getBrowserOrigin,
   navigateBrowser,
@@ -27,6 +29,11 @@ import { resolveFetchImplementation } from "./fetch-implementation.js";
 import type { OwnAuthPluginClientManifest } from "./plugin-types.js";
 
 export { OwnAuthClientError } from "./client-error.js";
+export { cloudClient, cloudNativeClient } from "./cloud-plugin.js";
+export {
+  CloudChallengeTimeoutError,
+  solveCloudChallenge
+} from "./cloud-challenge-client.js";
 export type { OAuthPopupResult } from "./client-oauth-popup.js";
 export type { OwnAuthPluginClient } from "./client-plugin.js";
 
@@ -67,6 +74,7 @@ export class OwnAuthClient {
   private readonly configuredHeaders?: OwnAuthClientOptions["headers"];
   private readonly pluginManifests: ReadonlyMap<string, OwnAuthPluginClientManifest>;
   private readonly pluginFingerprint?: string;
+  private readonly cloudOptions: Required<CloudClientOptions> | null;
   private readonly listeners = new Set<OwnAuthSessionListener>();
   private sessionLoaded = false;
   private sessionRevision = 0;
@@ -87,6 +95,8 @@ export class OwnAuthClient {
     this.configuredHeaders = options.headers;
     this.pluginManifests = new Map((options.plugins ?? []).map((plugin) => [plugin.id, plugin]));
     this.pluginFingerprint = options.pluginFingerprint;
+    const cloudManifest = (options.plugins ?? []).find(isCloudClientManifest);
+    this.cloudOptions = cloudManifest?.__ownAuthCloudClient ?? null;
     if (this.pluginManifests.size !== (options.plugins ?? []).length) {
       throw new Error("Own Auth client plugin IDs must be unique");
     }
@@ -395,10 +405,11 @@ export class OwnAuthClient {
       init.body = JSON.stringify(input);
     }
 
-    const { body } = await requestJson(
+    const { body } = await requestJsonWithCloudChallenge(
       this.fetchImpl,
       `${this.baseURL}${endpoint.path}`,
-      init
+      init,
+      this.cloudOptions
     );
     return body as OwnAuthEndpointOutputMap[Id];
   }

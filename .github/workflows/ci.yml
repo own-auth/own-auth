@@ -66,6 +66,9 @@ jobs:
       - name: Check D1 package resolution
         run: pnpm d1-resolution:check
 
+      - name: Check Cloud package resolution
+        run: pnpm cloud-resolution:check
+
       - name: Test
         run: pnpm test
 

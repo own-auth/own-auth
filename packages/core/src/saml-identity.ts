@@ -20,6 +20,7 @@ import {
   verifyPairedSamlEmail
 } from "./scim-saml.js";
 import type { ScimUser } from "./scim-types.js";
+import { recordCommittedAuthEvents } from "./webhook-outbox.js";
 
 export interface ResolvedSamlIdentity {
   user: User;
@@ -180,6 +181,7 @@ async function linkIdentity(
       membership: membership.created ? membership.member : undefined,
       auditEvents
     });
+    await recordCommittedAuthEvents(ctx, auditEvents);
   } catch (error) {
     const winner = await ctx.storage.getAccountByProvider(
       identity.provider,
@@ -192,7 +194,9 @@ async function linkIdentity(
       user.id
     );
     if (membership.created && currentMembership?.status === "active") {
-      await storage.commitIdentity({ account, auditEvents: auditEvents.slice(0, 1) });
+      const committedEvents = auditEvents.slice(0, 1);
+      await storage.commitIdentity({ account, auditEvents: committedEvents });
+      await recordCommittedAuthEvents(ctx, committedEvents);
       return;
     }
     throw error;
@@ -252,6 +256,7 @@ async function provisionIdentity(
   const { storage } = requireSaml(ctx);
   try {
     await storage.commitIdentity({ user, account, membership, auditEvents });
+    await recordCommittedAuthEvents(ctx, auditEvents);
     return { user, linked: true };
   } catch (error) {
     const winnerAccount = await ctx.storage.getAccountByProvider(
@@ -292,17 +297,19 @@ async function ensureMembership(
   const membership = await membershipFor(ctx, connection, user.id);
   if (!membership.created) return;
   const { storage } = requireSaml(ctx);
+  const auditEvents = [memberProvisionedEvent(
+    connection,
+    user.id,
+    membership.member.role,
+    request,
+    new Date()
+  )];
   try {
     await storage.commitIdentity({
       membership: membership.member,
-      auditEvents: [memberProvisionedEvent(
-        connection,
-        user.id,
-        membership.member.role,
-        request,
-        new Date()
-      )]
+      auditEvents
     });
+    await recordCommittedAuthEvents(ctx, auditEvents);
   } catch (error) {
     const winner = await ctx.storage.getOrganisationMember(
       connection.organisationId,

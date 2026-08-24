@@ -37,12 +37,26 @@ export async function recordAuthEvent(
 
   if (!write.webhookEvent) {
     await ctx.storage.createAuditEvent(auditEvent);
-    return;
+  } else {
+    await ctx.webhookStorage!.recordAuditEventWithWebhooks(
+      write.auditEvent,
+      write.webhookEvent,
+      write.webhookDeliveries
+    );
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
+}
 
-  await ctx.webhookStorage!.recordAuditEventWithWebhooks(
-    write.auditEvent,
-    write.webhookEvent,
-    write.webhookDeliveries
-  );
+export function recordCommittedAuthEvent(
+  ctx: AuthEngineContext,
+  auditEvent: AuditEvent
+): Promise<void> {
+  return ctx.cloud?.recordAuditEvent(auditEvent) ?? Promise.resolve();
+}
+
+export async function recordCommittedAuthEvents(
+  ctx: AuthEngineContext,
+  auditEvents: readonly AuditEvent[]
+): Promise<void> {
+  for (const event of auditEvents) await recordCommittedAuthEvent(ctx, event);
 }

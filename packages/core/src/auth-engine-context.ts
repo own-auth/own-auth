@@ -60,6 +60,9 @@ import {
 } from "./authorization-server-device-storage.js";
 import { argon2idPasswordHasher } from "./password-hashing.js";
 import type { PasswordHasher } from "./password-hasher.js";
+import { findCloudPlugin } from "./cloud-plugin.js";
+import { isCloudCapableStorage, type CloudStorage } from "./cloud-storage.js";
+import { CloudRuntime } from "./cloud-runtime.js";
 
 export interface AuthEngineContext {
   storage: AuthStorage;
@@ -100,6 +103,8 @@ export interface AuthEngineContext {
   samlStorage: SamlStorage | null;
   scim: ScimRuntimeConfig | null;
   scimStorage: ScimStorage | null;
+  cloud: CloudRuntime | null;
+  cloudStorage: CloudStorage | null;
   authorization: AuthorizationRegistry;
   closePersistence(): Promise<void>;
 }
@@ -203,13 +208,34 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     );
   }
 
+  const cloudPlugin = findCloudPlugin(options.plugins);
+  const cloudStorage = cloudPlugin && isCloudCapableStorage(persistence.storage)
+    ? persistence.storage.cloudStorage
+    : null;
+  if (cloudPlugin && !cloudStorage) {
+    throw new Error(
+      "Own Auth Cloud requires storage that supports CloudCapableStorage. " +
+      "Use Postgres, D1, the development-only in-memory adapter, or a custom " +
+      "CloudCapableStorage implementation."
+    );
+  }
+  if (cloudStorage && process.env.NODE_ENV === "production" && !cloudStorage.durable) {
+    throw new Error(
+      "Own Auth Cloud requires durable storage in production. " +
+      "Use Postgres, D1, or a durable custom CloudCapableStorage adapter."
+    );
+  }
+  const cloud = cloudPlugin && cloudStorage
+    ? new CloudRuntime(cloudPlugin.__ownAuthCloud, cloudStorage, persistence.storage)
+    : null;
+
   const password = normalizePasswordOptions(options.password);
 
   return {
     storage: persistence.storage,
     rateLimitStore: options.rateLimitStore ?? persistence.rateLimitStore,
-    emailProvider: options.emailProvider ?? new ConsoleEmailProvider(),
-    smsProvider: options.smsProvider ?? new ConsoleSmsProvider(),
+    emailProvider: options.emailProvider ?? cloud?.emailProvider ?? new ConsoleEmailProvider(),
+    smsProvider: options.smsProvider ?? cloud?.smsProvider ?? new ConsoleSmsProvider(),
     baseUrl,
     tokenPepper,
     exposeRawTokens: options.exposeRawTokens ?? false,
@@ -263,6 +289,8 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
     samlStorage,
     scim,
     scimStorage,
+    cloud,
+    cloudStorage,
     authorization: createAuthorizationRegistry(options.authorization),
     closePersistence: persistence.close
   };

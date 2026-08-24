@@ -3,6 +3,16 @@ export { createOwnAuth } from "./create-own-auth.js";
 export { OwnAuthAuthorizationServer } from "./auth-engine-authorization-server.js";
 export { OwnAuthSaml } from "./auth-engine-saml.js";
 export { OwnAuthScim } from "./auth-engine-scim.js";
+export { cloud } from "./cloud-plugin.js";
+export { OwnAuthCloud } from "./cloud-api.js";
+export type {
+  CloudBackfillInput,
+  CloudBackfillResult,
+  CloudDeliveryError,
+  CloudPluginOptions,
+  FlushCloudOutboxInput,
+  FlushCloudOutboxResult
+} from "./cloud-types.js";
 export {
   createOwnAuthAuthorizationServerHandler,
   createOwnAuthAuthorizationServerOpenApiDocument
@@ -373,13 +383,11 @@ export {
   ConsoleEmailProvider,
   ConsoleSmsProvider,
   MemoryEmailProvider,
-  MemorySmsProvider,
-  OwnAuthManagedEmailProvider
+  MemorySmsProvider
 } from "./providers.js";
 export type {
   EmailMessage,
   EmailProvider,
-  OwnAuthManagedEmailProviderOptions,
   SmsMessage,
   SmsProvider
 } from "./providers.js";

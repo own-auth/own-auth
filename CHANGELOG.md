@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Added the built-in `cloud()` plugin, `cloudClient()`, `cloudNativeClient()`, and `own-auth/challenge-solver` subpath for Own Auth Cloud.
+- Added strict Cloud event projection, durable Postgres and Cloudflare D1 outboxes, priority deletion delivery, explicit backfill, advisory security checks, local proof-of-work challenges, managed email and SMS delivery, and signed idempotent remote mutations.
+- Added migration `018_cloud` and the `auth.cloud` methods for backfill, outbox flushing, outbox clearing, challenge-secret rotation, and Cloud-state cleanup.
+- Added the package-owned executable Cloud event contract, complete user/organisation/membership/session backfill, and atomic outbox backpressure across Postgres, D1, and memory storage.
+- Delivery-returning auth methods now include a `delivery` status so managed delivery failures can be handled without invalidating the token or code that was created.
+
 ## 0.3.11
 
 ### Fixed

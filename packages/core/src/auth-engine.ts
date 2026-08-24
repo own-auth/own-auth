@@ -119,6 +119,9 @@ import type {
   RetryWebhookDeliveryInput,
   WebhookDeliveryDetails
 } from "./webhook-types.js";
+import { OwnAuthCloud } from "./cloud-api.js";
+import { resolveCloudOperationUserId } from "./cloud-operation-context.js";
+import type { CloudCommandPayload } from "./cloud-types.js";
 export type { OwnAuthOptions } from "./auth-engine-types.js";
 export class OwnAuth<CustomRole extends string = never, CustomPermission extends string = never> {
   readonly storage: AuthStorage;
@@ -127,6 +130,7 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
   readonly authorizationServer: OwnAuthAuthorizationServer;
   readonly saml: OwnAuthSaml;
   readonly scim: OwnAuthScim;
+  readonly cloud: OwnAuthCloud;
   private readonly ctx: AuthEngineContext;
   private readonly pluginRuntime: OwnAuthPluginRuntime;
   private closed = false;
@@ -146,11 +150,16 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
     this.authorizationServer = new OwnAuthAuthorizationServer(this.ctx, this.executeCore);
     this.saml = new OwnAuthSaml(this.ctx, this.executeCore);
     this.scim = new OwnAuthScim(this.ctx, this.executeCore);
+    this.cloud = new OwnAuthCloud(this.ctx.cloud, () => this as unknown as OwnAuth<string, string>);
   }
   get plugins(): readonly OwnAuthPluginDefinition[] { return this.pluginRuntime.definitions; }
   get pluginContractFingerprint(): string { return this.pluginRuntime.fingerprint; }
   /** @internal Used by createOwnAuthHandler. */
   isAdministrationConfigured(): boolean { return this.ctx.administration !== null; }
+  /** @internal Used only after a signed Cloud command has been verified and reserved. */
+  executeCloudCommand(input: CloudCommandPayload): Promise<void> {
+    return users.executeCloudUserCommand(this.ctx, input);
+  }
   /** @internal Used by createOwnAuthHandler. */
   findPluginEndpoint(path: string, method: string): RegisteredPluginEndpoint | null {
     return this.pluginRuntime.findEndpoint(path, method);
@@ -197,14 +206,34 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
     );
   }
   private readonly executeCore: AuthOperationRunner = (operation, input, work) => {
+    const request = requestContextFrom(input);
     return this.runWhileOpen(() =>
       traceAuthOperation(
         operation,
         () => this.pluginRuntime.runCoreOperation(
           operation,
           input,
-          requestContextFrom(input),
-          work
+          request,
+          async () => {
+            const cloudUserId = this.ctx.cloud
+              ? await resolveCloudOperationUserId(this.storage, operation, input)
+              : undefined;
+            const cloudContext = {
+              operation,
+              input,
+              request,
+              userId: cloudUserId
+            };
+            await this.ctx.cloud?.beforeOperation(cloudContext);
+            try {
+              const result = await work();
+              await this.ctx.cloud?.afterOperation({ ...cloudContext, result });
+              return result;
+            } catch (error) {
+              await this.ctx.cloud?.afterOperation({ ...cloudContext, error });
+              throw error;
+            }
+          }
         )
       )
     );

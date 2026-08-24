@@ -31,7 +31,7 @@ import {
 } from "./auth-engine-internals.js";
 import { finishVerifiedMfa, requireMfaChallenge } from "./auth-engine-mfa.js";
 import { requireCurrentSession } from "./auth-engine-sessions.js";
-import { prepareAuthEventWrite } from "./webhook-outbox.js";
+import { prepareAuthEventWrite, recordCommittedAuthEvent } from "./webhook-outbox.js";
 
 export async function beginPasskeyRegistration(
   ctx: AuthEngineContext,
@@ -269,17 +269,18 @@ export async function revokePasskey(
 ): Promise<void> {
   const { user } = await requireCurrentSession(ctx, input.sessionToken);
   const credential = await requireOwnedPasskey(ctx, input.passkeyId, user.id);
+  const auditEvent = createAuditEvent({
+    eventType: "passkey.revoked",
+    actorUserId: user.id,
+    targetUserId: user.id,
+    request: input.request,
+    metadata: { passkeyId: credential.id }
+  });
   const removed = await ctx.storage.removeAuthenticationMethodAtomically({
     operationId: createId("op"),
     userId: user.id,
     method: { kind: "passkey", id: credential.id },
-    event: prepareAuthEventWrite(ctx, createAuditEvent({
-      eventType: "passkey.revoked",
-      actorUserId: user.id,
-      targetUserId: user.id,
-      request: input.request,
-      metadata: { passkeyId: credential.id }
-    }))
+    event: prepareAuthEventWrite(ctx, auditEvent)
   });
   if (removed === "last_method") {
     throw new AuthError(
@@ -291,6 +292,7 @@ export async function revokePasskey(
   if (removed === "not_found") {
     throw notFound();
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
 }
 
 async function storeChallenge(

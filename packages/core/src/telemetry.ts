@@ -6,7 +6,7 @@ import {
   type Attributes,
   type Span
 } from "@opentelemetry/api";
-import { AuthError } from "./errors.js";
+import { isAuthError } from "./errors.js";
 import { OWN_AUTH_VERSION } from "./version.js";
 
 const instrumentationName = "own-auth";
@@ -279,7 +279,7 @@ function markSpanError(span: Span, type: string): void {
 }
 
 function safeErrorType(error: unknown): string {
-  return error instanceof AuthError ? error.code : "internal_error";
+  return isAuthError(error) ? error.code : "internal_error";
 }
 
 function safeDeliveryType(channel: DeliveryChannel, type: string): string {

@@ -41,6 +41,10 @@ export type SignInResult = SessionResult | MfaRequiredResult;
 export interface DeliveryResult {
   sent: boolean;
   expiresAt: Date | null;
+  delivery: {
+    status: "sent" | "failed";
+    reason?: "quota_exhausted" | "provider_rejected" | "transient_error" | "invalid_request";
+  };
   token?: string;
   code?: string;
   url?: string;
@@ -349,6 +353,7 @@ export interface GetMemberInput {
 
 export interface InvitationResult<CustomRole extends string = never> {
   invitation: Invitation<CustomRole>;
+  delivery: DeliveryResult["delivery"];
   token?: string;
   url?: string;
 }
@@ -390,6 +395,7 @@ export interface RemoveMemberInput {
 export interface UserStatusInput {
   userId: string;
   actorUserId: string;
+  reason?: "manual" | "security";
   request?: RequestContext;
 }
 

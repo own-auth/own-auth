@@ -1,5 +1,5 @@
 import type { OwnAuth } from "../auth-engine.js";
-import { AuthError } from "../errors.js";
+import { isAuthError } from "../errors.js";
 import type { RequestContext } from "../types.js";
 import { OAuthCallbackError } from "../oauth-types.js";
 import { SamlCallbackError } from "../saml-callback-error.js";
@@ -24,9 +24,11 @@ import { OwnAuthHttpError } from "./errors.js";
 import { executeEndpoint, type EndpointExecution } from "./execution.js";
 import { createOAuthCallbackResponse } from "./oauth-response.js";
 import { createSamlCallbackResponse } from "./saml-response.js";
-import { pluginInputContract, readEndpointInput } from "./request-input.js";
+import { pluginInputContract, readEndpointInput, readLimitedBody } from "./request-input.js";
 import { getOwnAuthRoutePath, normalizeOwnAuthBasePath } from "./routing.js";
 import { traceHttpEndpoint } from "../telemetry.js";
+import { CloudChallengeError } from "../cloud-errors.js";
+import type { CloudChallengeResponsePayload } from "../cloud-types.js";
 
 export interface OwnAuthHandlerOptions {
   basePath?: string;
@@ -52,6 +54,9 @@ export function createOwnAuthHandler(
 
   return async (request) => {
     const requestUrl = new URL(request.url);
+    if (auth.cloud.webhookPath === requestUrl.pathname) {
+      return handleCloudWebhook(auth, request, maxRequestBodyBytes);
+    }
     const routePath = getOwnAuthRoutePath(requestUrl.pathname, basePath);
     if (!routePath) return errorResponse("not_found", "Auth endpoint not found", 404);
 
@@ -103,9 +108,10 @@ export function createOwnAuthHandler(
               ? Math.min(maxRequestBodyBytes, 64 * 1024)
               : maxRequestBodyBytes
           );
-          const context = options.getRequestContext
+          const providedContext = options.getRequestContext
             ? await options.getRequestContext(request)
             : defaultRequestContext(request);
+          const context = cloudRequestContext(request, providedContext);
           const execution = await executeEndpoint(
             auth,
             endpoint.id,
@@ -172,9 +178,10 @@ async function handlePluginEndpoint(
       contract,
       options.maxRequestBodyBytes ?? 64 * 1024
     );
-    const context = options.getRequestContext
+    const providedContext = options.getRequestContext
       ? await options.getRequestContext(request)
       : defaultRequestContext(request);
+    const context = cloudRequestContext(request, providedContext);
     const body = await auth.executePluginEndpoint(
       registered,
       input,
@@ -197,6 +204,16 @@ async function handleRequestError(
   oauthCallback: boolean,
   samlCallback = false
 ): Promise<Response> {
+  if (error instanceof CloudChallengeError) {
+    const payload: CloudChallengeResponsePayload = {
+      error: { code: "cloud_challenge_required", message: error.safeMessage },
+      challenge: error.challenge
+    };
+    return new Response(JSON.stringify(payload), {
+      status: error.statusCode,
+      headers: responseHeaders()
+    });
+  }
   if (oauthCallback && error instanceof OAuthCallbackError) {
     if (error.statusCode >= 500) await reportError(options.onError, error, request);
     return createOAuthCallbackResponse(
@@ -245,7 +262,7 @@ function knownHttpError(error: unknown): {
   message: string;
   status: number;
 } | null {
-  if (error instanceof AuthError) {
+  if (isAuthError(error)) {
     return { code: error.code, message: error.safeMessage, status: error.statusCode };
   }
   if (error instanceof OwnAuthPluginError) {
@@ -298,6 +315,40 @@ function applyCookies(
 
 function defaultRequestContext(request: Request): RequestContext {
   return { userAgent: request.headers.get("user-agent") ?? undefined };
+}
+
+function cloudRequestContext(request: Request, context: RequestContext): RequestContext {
+  return {
+    ...context,
+    cloudChallengeResponse:
+      request.headers.get("x-ownauth-challenge-response") ?? undefined,
+    cloudAppeal: request.headers.get("x-ownauth-appeal") === "1",
+    path: new URL(request.url).pathname
+  };
+}
+
+async function handleCloudWebhook(
+  auth: OwnAuth<string, string>,
+  request: Request,
+  maxBodyBytes: number
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return errorResponse("method_not_allowed", "Method not allowed", 405, { allow: "POST" });
+  }
+  if (request.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json") {
+    return errorResponse("invalid_request", "content-type must be application/json", 415);
+  }
+  try {
+    const body = await readLimitedBody(request, maxBodyBytes);
+    const result = await auth.cloud.handleCommand(request, body);
+    const headers = responseHeaders();
+    if (result.retryAfter !== undefined) headers.set("retry-after", String(result.retryAfter));
+    return new Response(JSON.stringify(result.body), { status: result.status, headers });
+  } catch (error) {
+    const known = knownHttpError(error);
+    if (known) return errorResponse(known.code, known.message, known.status);
+    return errorResponse("internal_error", "Cloud command failed", 500);
+  }
 }
 
 function responseHeaders(): Headers {

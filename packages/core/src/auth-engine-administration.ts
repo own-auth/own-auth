@@ -13,7 +13,7 @@ import {
 } from "./administration.js";
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
 import { safeEqual } from "./crypto.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import type { StoragePageCursor } from "./storage.js";
 import type { Session, User } from "./types.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
@@ -417,7 +417,7 @@ function decodeCursor(
     if (Number.isNaN(createdAt.getTime())) throw invalidCursor();
     return { createdAt, id: payload.id };
   } catch (error) {
-    if (error instanceof AuthError) throw error;
+    if (isAuthError(error)) throw error;
     throw invalidCursor();
   }
 }

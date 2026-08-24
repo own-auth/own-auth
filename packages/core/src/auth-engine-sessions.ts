@@ -88,6 +88,7 @@ export async function signOut(
   if (!revoked?.revokedAt) {
     return;
   }
+  await ctx.cloud?.recordSessionRevoked(revoked, context);
   await audit(ctx, {
     eventType: "user.signed_out",
     actorUserId: session.userId,
@@ -129,6 +130,8 @@ export async function revokeSession(
     throw new AuthError("invalid_session", "Session not found", 404);
   }
 
+  await ctx.cloud?.recordSessionRevoked(revoked, input.request);
+
   await audit(ctx, {
     eventType: "session.revoked",
     actorUserId: current.user.id,
@@ -147,7 +150,9 @@ export async function revokeAllSessions(
   ctx: AuthEngineContext,
   input: RevokeAllSessionsInput
 ): Promise<number> {
-  await requireActiveUser(ctx, input.actorUserId);
+  if (!await ctx.storage.getUserById(input.actorUserId)) {
+    throw new AuthError("user_not_found", "User not found", 404);
+  }
   return revokeAllSessionsForUser(
     ctx,
     input.actorUserId,
@@ -164,7 +169,7 @@ export async function revokeAllSessionsForUser(
   actorUserId = userId,
   context?: RequestContext
 ): Promise<number> {
-  const revoked = await revokeSessions(ctx, userId, reason);
+  const revoked = await revokeSessions(ctx, userId, reason, undefined, context);
 
   await audit(ctx, {
     eventType: "session.revoked_all",
@@ -204,7 +209,8 @@ async function revokeSessions(
   ctx: AuthEngineContext,
   userId: string,
   reason: string,
-  include: (session: Session) => boolean = () => true
+  include: (session: Session) => boolean = () => true,
+  context?: RequestContext
 ): Promise<number> {
   const sessions = await ctx.storage.listSessionsByUserId(userId);
   const revokedAt = new Date();
@@ -217,6 +223,7 @@ async function revokeSessions(
         revokeReason: reason
       });
       if (updated?.revokedAt) {
+        await ctx.cloud?.recordSessionRevoked(updated, context);
         revoked += 1;
       }
     }

@@ -147,8 +147,12 @@ export class OwnAuthScim {
     resourceId: string,
     expectedVersion: number | null,
     request?: RequestContext
-  ): Promise<void> {
-    return this.execute("scim.deleteUser", { resourceId, request }, () =>
+  ): Promise<ScimUser> {
+    return this.execute("scim.deleteUser", {
+      resourceId,
+      organisationId: connection.organisationId,
+      request
+    }, () =>
       users.deleteUserResource(this.ctx, connection, resourceId, expectedVersion, request));
   }
 }

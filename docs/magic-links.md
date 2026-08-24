@@ -25,7 +25,7 @@ When new-user signup is disabled, an unknown email returns the same public resul
 
 ### Email delivery
 
-The email is sent through the configured `emailProvider`, which can use any email service, or through Own Auth Delivery. See [Configuration](/docs/configuration) for setup.
+The email is sent through the configured `emailProvider`, which can use any email service, or through [Own Auth Cloud](/docs/cloud). See [Configuration](/docs/configuration) for setup.
 
 ### Link format
 

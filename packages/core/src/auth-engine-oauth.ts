@@ -1,6 +1,6 @@
 import { createId, randomBase64Url } from "./crypto.js";
 import { requireEncryptionKeyRing } from "./encryption.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import { deriveOAuthSecrets } from "./oauth-derivation.js";
 import { requireOAuthProvider } from "./oauth-registry.js";
 import { OAuthCallbackError } from "./oauth-types.js";
@@ -146,15 +146,16 @@ export async function completeOAuthSignIn(
     });
     return completionMetadata(transaction, session);
   } catch (error) {
+    const knownError = isAuthError(error) ? error : null;
     await auditOAuthFailure(
       ctx,
       input.provider,
-      error instanceof AuthError ? error.code : "oauth_provider_error",
+      knownError?.code ?? "oauth_provider_error",
       input.request,
       transaction.userId
     );
-    const authError = error instanceof AuthError
-      ? error
+    const authError = knownError
+      ? knownError
       : new AuthError("oauth_provider_error", "OAuth sign-in failed", 502);
     throw new OAuthCallbackError(
       authError.code,
@@ -251,7 +252,7 @@ export async function signInWithGoogleOneTap(
     await auditOAuthFailure(
       ctx,
       "google",
-      error instanceof AuthError ? error.code : "oauth_provider_error",
+      isAuthError(error) ? error.code : "oauth_provider_error",
       input.request,
       null,
       "one_tap"

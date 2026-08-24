@@ -51,6 +51,7 @@ export async function verifyMagicLink(
 ): Promise<SignInResult> {
   const token = await consumeToken(ctx, input.token, "magic_link");
   let user = token.userId ? await ctx.storage.getUserById(token.userId) : null;
+  let created = false;
 
   if (!user && token.email) {
     user = await ctx.storage.getUserByEmail(token.email);
@@ -58,6 +59,7 @@ export async function verifyMagicLink(
 
   if (!user && token.email && ctx.allowMagicLinkSignup) {
     user = await createUser(ctx, { email: token.email });
+    created = true;
   }
 
   if (!user) {
@@ -72,6 +74,16 @@ export async function verifyMagicLink(
       emailVerifiedAt: new Date(),
       updatedAt: new Date()
     }));
+  }
+
+  if (created) {
+    await audit(ctx, {
+      eventType: "user.signed_up",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      context: input.request,
+      metadata: { provider: "magic_link" }
+    });
   }
 
   await audit(ctx, {

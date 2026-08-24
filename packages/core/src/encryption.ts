@@ -1,4 +1,4 @@
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
 
 export type EncryptionPurpose =
@@ -101,7 +101,7 @@ export class EncryptionKeyRing {
         needsRotation: value.encryptionKeyId !== this.currentKeyId
       };
     } catch (error) {
-      if (error instanceof AuthError) {
+      if (isAuthError(error)) {
         throw error;
       }
       throw new AuthError("encrypted_data_invalid", "Encrypted authentication data is invalid", 500);

@@ -28,6 +28,7 @@ import {
   revokeAllSessionsForUser,
   revokeOtherSessions
 } from "./auth-engine-sessions.js";
+import type { CloudCommandPayload } from "./cloud-types.js";
 
 export async function createUser(ctx: AuthEngineContext, input: CreateUserInput): Promise<User> {
   const email = input.email === undefined ? null : requireValidEmail(input.email);
@@ -186,6 +187,35 @@ export async function enableUser(ctx: AuthEngineContext, input: UserStatusInput)
   return setUserDisabled(ctx, input, false);
 }
 
+export async function executeCloudUserCommand(
+  ctx: AuthEngineContext,
+  input: CloudCommandPayload
+): Promise<void> {
+  if (input.action === "user.revoke-sessions") {
+    await revokeAllSessionsForUser(
+      ctx,
+      input.userId,
+      "cloud_command",
+      input.initiatedBy
+    );
+    return;
+  }
+  const disabled = input.action === "user.disable";
+  const result = await setUserDisabledState(ctx, {
+    userId: input.userId,
+    disabled,
+    actorUserId: input.initiatedBy,
+    sessionRevokeReason: "cloud_command"
+  });
+  if (!result.changed) return;
+  await audit(ctx, {
+    eventType: disabled ? "user.disabled" : "user.re_enabled",
+    actorUserId: input.initiatedBy,
+    targetUserId: input.userId,
+    metadata: { reason: input.reason, source: "cloud" }
+  });
+}
+
 async function setUserDisabled(
   ctx: AuthEngineContext,
   input: UserStatusInput,
@@ -212,7 +242,8 @@ async function setUserDisabled(
     eventType: disabled ? "user.disabled" : "user.re_enabled",
     actorUserId: input.actorUserId,
     targetUserId: input.userId,
-    context: input.request
+    context: input.request,
+    metadata: { reason: input.reason ?? "manual" }
   });
 
   return result.user;

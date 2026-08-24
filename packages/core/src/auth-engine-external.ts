@@ -25,7 +25,7 @@ import {
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
-import { prepareAuthEventWrite } from "./webhook-outbox.js";
+import { prepareAuthEventWrite, recordCommittedAuthEvent } from "./webhook-outbox.js";
 
 export async function signInWithVerifiedExternalIdentity(
   ctx: AuthEngineContext,
@@ -65,17 +65,18 @@ export async function unlinkOAuthProvider(
   if (!account || account.userId !== user.id) {
     throw new AuthError("invalid_credentials", "External provider account not found", 404);
   }
+  const auditEvent = createAuditEvent({
+    eventType: "external_provider.unlinked",
+    actorUserId: user.id,
+    targetUserId: user.id,
+    request: input.request,
+    metadata: { provider }
+  });
   const removed = await ctx.storage.removeAuthenticationMethodAtomically({
     operationId: createId("op"),
     userId: user.id,
     method: { kind: "account", id: account.id },
-    event: prepareAuthEventWrite(ctx, createAuditEvent({
-      eventType: "external_provider.unlinked",
-      actorUserId: user.id,
-      targetUserId: user.id,
-      request: input.request,
-      metadata: { provider }
-    }))
+    event: prepareAuthEventWrite(ctx, auditEvent)
   });
   if (removed === "last_method") {
     throw new AuthError(
@@ -87,6 +88,7 @@ export async function unlinkOAuthProvider(
   if (removed === "not_found") {
     throw new AuthError("invalid_credentials", "External provider account not found", 404);
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
 }
 
 export async function resolveExternalIdentity(

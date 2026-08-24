@@ -1,6 +1,6 @@
 import type { OwnAuth } from "./auth-engine.js";
 import { createId } from "./crypto.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import { enforceRateLimit, type RateLimitStore } from "./rate-limit.js";
 import type { AuthStorage } from "./storage.js";
 import type { CurrentSession, JsonRecord, RequestContext } from "./types.js";
@@ -188,7 +188,7 @@ export class OwnAuthPluginRuntime {
       request: immutableClone(request),
       signal
     })).catch((error: unknown) => {
-      if (error instanceof OwnAuthPluginError || error instanceof AuthError) throw error;
+      if (error instanceof OwnAuthPluginError || isAuthError(error)) throw error;
       throw new AuthError(
         error instanceof PluginHookTimeoutError ? "plugin_hook_timeout" : "plugin_denied",
         error instanceof PluginHookTimeoutError

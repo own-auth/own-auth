@@ -18,7 +18,7 @@ Own Auth stores authentication data in Postgres by default. Cloudflare Workers c
 
 Own Auth is not a hosted service. There is no login page we host for you, no user database we manage, and no dashboard where you look up your users. Your backend runs the auth. Your database stores the data. Your code controls the flow.
 
-Own Auth Delivery is the one optional managed service. It sends auth emails (magic links, verification, password resets, and invites) so you do not have to configure SMTP. Delivery does not touch your users or sessions. It sends an email containing a link.
+Own Auth Cloud is the optional managed operations layer. It can send auth email and SMS, provide a dashboard and analytics, retain audit-log copies, and return advisory security decisions. It does not replace local authentication or become the source of truth for users and sessions.
 
 ## How it works
 

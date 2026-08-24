@@ -231,7 +231,7 @@ You have basic email/password auth. Here is where to go next:
 
 **API access for integrations**: Issue scoped [application API keys](https://own-auth.com/docs/api-keys) for programmatic access to your application's API.
 
-**Email delivery**: Set up your own email provider, or use [Own Auth Delivery](https://own-auth.com/docs/sending-email) to send magic links, verification emails, and invitations without configuring SMTP.
+**Email delivery**: Set up your own provider, or use [Own Auth Cloud](https://github.com/own-auth/own-auth/blob/main/docs/cloud.md) to send magic links, verification emails, invitations, and SMS codes.
 
 **Security**: Read the [security model](https://own-auth.com/docs/security-model) to understand hashing, token expiry, rate limiting, and audit logs.
 
@@ -354,25 +354,38 @@ export const auth = createOwnAuth({
 });
 ```
 
-### Managed Email
+### Own Auth Cloud
 
-Skip this if your app sends its own emails. Use this if you want Own Auth to handle delivery for you.
+Own Auth Cloud is optional. It adds managed email and SMS delivery, a dashboard, analytics, audit-log copies, and advisory security checks. Authentication still runs in this application and its database remains the source of truth.
 
 ```ts
-import { OwnAuthManagedEmailProvider, createOwnAuth } from "own-auth";
-
-const appLink = "replace-with-the-url-your-app-handles";
+import { createOwnAuth } from "own-auth";
+import { cloud } from "own-auth/cloud";
 
 export const auth = createOwnAuth({
   tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
-  baseUrl: appLink,
-  emailProvider: new OwnAuthManagedEmailProvider({
-    deliveryKey: process.env.OWN_AUTH_EMAIL_DELIVERY_KEY,
-  }),
+  plugins: [
+    cloud({
+      key: process.env.OWN_AUTH_CLOUD_KEY!,
+      webhookSigningSecret: process.env.OWN_AUTH_WEBHOOK_SECRET,
+    }),
+  ],
 });
 ```
 
-Managed delivery uses `https://api.own-auth.com/v1/email` by default.
+Run `npx own-auth migrate` after enabling Cloud. See [Own Auth Cloud](https://github.com/own-auth/own-auth/blob/main/docs/cloud.md) for delivery, security, backfill, outbox, and webhook setup.
+
+Use `auth.cloud.backfill()` when connecting an existing application so Cloud receives its current users, organisations, memberships, and active sessions.
+
+```ts
+auth.cloud.isConfigured();
+await auth.cloud.backfill();
+await auth.cloud.flushOutbox();
+await auth.cloud.clearOutbox();
+await auth.cloud.eraseUser(userId);
+await auth.cloud.rotateChallengeSecret();
+await auth.cloud.cleanup(olderThan);
+```
 
 ## Magic Links
 

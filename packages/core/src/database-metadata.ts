@@ -15,7 +15,8 @@ export const coreMigrationFiles = [
   "014_saml.sql",
   "015_scim.sql",
   "016_device_authorization.sql",
-  "017_atomic_auth_operations.sql"
+  "017_atomic_auth_operations.sql",
+  "018_cloud.sql"
 ] as const;
 
 export const initialMigration = coreMigrationFiles[0];
@@ -61,5 +62,10 @@ export const databaseTables = {
   scimConnections: "own_auth_scim_connections",
   scimTokens: "own_auth_scim_tokens",
   scimUsers: "own_auth_scim_users",
-  deviceAuthorizations: "own_auth_device_authorizations"
+  deviceAuthorizations: "own_auth_device_authorizations",
+  cloudEntityVersions: "own_auth_cloud_entity_versions",
+  cloudOutbox: "own_auth_cloud_outbox",
+  cloudCommands: "own_auth_cloud_commands",
+  cloudConfig: "own_auth_cloud_config",
+  cloudChallengeNonces: "own_auth_cloud_challenge_nonces"
 } as const;

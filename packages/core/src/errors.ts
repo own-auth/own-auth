@@ -74,6 +74,11 @@ export type AuthErrorCode =
   | "webhook_timestamp_invalid"
   | "webhook_replayed"
   | "webhook_delivery_not_retryable"
+  | "cloud_not_configured"
+  | "cloud_access_denied"
+  | "cloud_challenge_required"
+  | "cloud_challenge_invalid"
+  | "cloud_command_invalid"
   | "auth_closed"
   | "validation_error";
 

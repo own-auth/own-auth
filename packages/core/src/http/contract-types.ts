@@ -103,6 +103,10 @@ export type SignInPayload = AuthSessionPayload | MfaRequiredPayload;
 export interface DeliveryPayload {
   sent: boolean;
   expiresAt: string | null;
+  delivery: {
+    status: "sent" | "failed";
+    reason?: "quota_exhausted" | "provider_rejected" | "transient_error" | "invalid_request";
+  };
 }
 
 export interface OwnAuthEndpointInputMap {

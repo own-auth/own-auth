@@ -121,10 +121,12 @@ export function serializeAdministrationAuditEvent(
 export function serializeDelivery(input: {
   sent: boolean;
   expiresAt: Date | null;
+  delivery: DeliveryPayload["delivery"];
 }): DeliveryPayload {
   return {
     sent: input.sent,
-    expiresAt: toIso(input.expiresAt)
+    expiresAt: toIso(input.expiresAt),
+    delivery: input.delivery
   };
 }
 

@@ -14,7 +14,7 @@ import type {
   AuthorizationTokenActionInput,
   AuthorizationTokenRequestInput
 } from "./authorization-server-types.js";
-import { AuthError } from "./errors.js";
+import { isAuthError } from "./errors.js";
 import {
   readSessionToken,
   type OwnAuthSessionCookieOptions
@@ -220,7 +220,7 @@ async function handleProtocolError(
 
 function toProtocolError(error: unknown): AuthorizationProtocolError {
   if (error instanceof AuthorizationProtocolError) return error;
-  if (error instanceof AuthError) {
+  if (isAuthError(error)) {
     if (error.code === "rate_limited") {
       return new AuthorizationProtocolError(
         "temporarily_unavailable",

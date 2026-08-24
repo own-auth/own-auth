@@ -1,5 +1,5 @@
 import type { OwnAuth } from "./auth-engine.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import {
   authenticateScimRequest,
   createScimUser,
@@ -69,7 +69,7 @@ export function createOwnAuthScimHandler(
           connection: authenticated.connection
         });
       } catch (error) {
-        if (!(error instanceof ScimProtocolError) && !(error instanceof AuthError)) {
+        if (!(error instanceof ScimProtocolError) && !isAuthError(error)) {
           await reportError(options.onError, error, request);
         }
         return mapError(error);
@@ -206,7 +206,7 @@ function mapError(error: unknown): Response {
   if (error instanceof ScimProtocolError) {
     return scimError(error.status, error.scimType, error.message);
   }
-  if (error instanceof AuthError) {
+  if (isAuthError(error)) {
     const scimType = error.code === "validation_error" ? "invalidValue" : null;
     return scimError(error.statusCode, scimType, error.safeMessage, error.statusCode === 401);
   }

@@ -85,6 +85,7 @@ function publicApiSnapshot() {
   );
   const saml = sourceFile("packages/core/src/auth-engine-saml.ts");
   const scim = sourceFile("packages/core/src/auth-engine-scim.ts");
+  const cloud = sourceFile("packages/core/src/cloud-api.ts");
   const options = sourceFile("packages/core/src/auth-engine-options.ts");
   const errors = sourceFile("packages/core/src/errors.ts");
   const exportedValues = [];
@@ -148,7 +149,11 @@ function publicApiSnapshot() {
         { excludeInternal: true }
       ),
       saml: classMethodNames(saml, "OwnAuthSaml", { excludeInternal: true }),
-      scim: classMethodNames(scim, "OwnAuthScim", { excludeInternal: true })
+      scim: classMethodNames(scim, "OwnAuthScim", { excludeInternal: true }),
+      cloud: classMethodNames(cloud, "OwnAuthCloud", {
+        excludeInternal: true,
+        excludePrivate: true
+      })
     },
     options: optionNames.sort(),
     typeExports: exportedTypes.sort()

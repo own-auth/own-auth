@@ -3,7 +3,6 @@ import { createOwnAuthClient } from "../src/client.js";
 import { createDeviceFlowClient } from "../src/device-authorization.js";
 import { resolveFetchImplementation } from "../src/fetch-implementation.js";
 import { createOAuthProviderRegistry } from "../src/oauth-registry.js";
-import { OwnAuthManagedEmailProvider } from "../src/providers.js";
 import { createOwnAuthProtectedResource } from "../src/protected-resource.js";
 import { normalizeWebhookOptions } from "../src/webhook-config.js";
 
@@ -55,9 +54,6 @@ describe("default fetch handling", () => {
           primary: true
         }]);
       }
-      if (url === "https://api.own-auth.com/v1/email") {
-        return new Response(null, { status: 202 });
-      }
       if (url === "https://hooks.example.com/") {
         return new Response(null, { status: 204 });
       }
@@ -68,17 +64,6 @@ describe("default fetch handling", () => {
       baseURL: "https://app.example.com/api/auth"
     });
     await expect(client.getSession()).resolves.toBeNull();
-
-    const emailProvider = new OwnAuthManagedEmailProvider({
-      deliveryKey: "delivery-key"
-    });
-    await emailProvider.send({
-      to: "user@example.com",
-      type: "magic_link",
-      token: "raw-token",
-      url: "https://app.example.com/auth/magic?token=raw-token",
-      expiresAt: new Date("2026-01-01T00:00:00.000Z")
-    });
 
     const deviceClient = createDeviceFlowClient({
       deviceAuthorizationEndpoint: "https://auth.example.com/oauth/device/authorize",
@@ -140,7 +125,6 @@ describe("default fetch handling", () => {
 
     expect(requests).toEqual(expect.arrayContaining([
       "https://app.example.com/api/auth/session",
-      "https://api.own-auth.com/v1/email",
       "https://auth.example.com/oauth/device/authorize",
       "https://auth.example.com/oauth/introspect",
       "https://github.com/login/oauth/access_token",

@@ -6,11 +6,118 @@ import {
   createD1Persistence
 } from "../../src/d1/index.js";
 import { D1WebhookStorage } from "../../src/d1/d1-webhook-storage.js";
+import { createCloudEvent } from "../../src/cloud-events.js";
 import type { Account, AuditEvent, User } from "../../src/types.js";
 import type { StoredWebhookEvent } from "../../src/webhook-types.js";
 import { RecordingD1 } from "./recording-d1.js";
 
 describe("D1 persistence", () => {
+  it("stores Cloud events and entity versions in one D1 batch", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).cloudStorage;
+    database.queue([]);
+    database.queue([]);
+    database.queue([{ version: 1 }]);
+    const event = createCloudEvent("app_cloud", {
+      type: "user.updated",
+      data: { userId: "usr_cloud", email: "user@example.com", authMethods: ["email"] },
+      userId: "usr_cloud",
+      entity: { type: "user", id: "usr_cloud" }
+    });
+
+    const stored = await storage.enqueueCloudEvent(
+      event,
+      { type: "user", id: "usr_cloud" },
+      false,
+      10_000
+    );
+
+    if (!stored) throw new Error("Cloud event was not stored");
+    expect(stored.entityVersion).toBe(1);
+    expect(database.calls[0]?.sql).toContain("own_auth_cloud_entity_versions");
+    expect(database.calls[0]?.sql).toContain("count(*) from own_auth_cloud_outbox");
+    expect(database.calls[0]?.values).toContain(10_000);
+    expect(database.calls[1]?.sql).toContain("own_auth_cloud_outbox");
+    expect(database.calls[1]?.sql).toContain("count(*) from own_auth_cloud_outbox");
+    expect(database.calls[1]?.values).toContain(10_000);
+    expect(database.calls[1]?.sql).not.toContain("user@example.com");
+    expect(database.calls[1]?.values.some(
+      (value) => String(value).includes("user@example.com")
+    )).toBe(true);
+  });
+
+  it("includes active organisation memberships in Cloud backfill snapshots", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).cloudStorage;
+    database.queue([{
+      kind: "member",
+      entity_id: "org_1:usr_1",
+      entity_version: 3,
+      data: JSON.stringify({
+        orgId: "org_1",
+        userId: "usr_1",
+        role: "owner",
+        createdAt: 1_725_796_800_000
+      })
+    }]);
+
+    const page = await storage.listCloudSnapshot(null, 100);
+
+    expect(page.records).toEqual([{
+      type: "member",
+      entityVersion: 3,
+      data: {
+        orgId: "org_1",
+        userId: "usr_1",
+        role: "owner",
+        createdAt: new Date(1_725_796_800_000).toISOString()
+      }
+    }]);
+    expect(database.calls[0]?.sql).toContain("from own_auth_organisation_members m");
+    expect(database.calls[0]?.sql).toContain("where m.status = 'active'");
+  });
+
+  it("backfills every usable authentication method", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).cloudStorage;
+    database.queue([{
+      kind: "user",
+      entity_id: "usr_1",
+      entity_version: 1,
+      data: JSON.stringify({
+        userId: "usr_1",
+        email: "alice@example.com",
+        name: "Alice",
+        status: "active",
+        authMethods: ["google", "magic_link", "passkey", "password", "totp"],
+        createdAt: 1_725_796_800_000,
+        lastLoginAt: null
+      })
+    }]);
+
+    const page = await storage.listCloudSnapshot(null, 100);
+
+    expect(page.records[0]?.data.authMethods).toEqual([
+      "google", "magic_link", "passkey", "password", "totp"
+    ]);
+    expect(database.calls[0]?.sql).toContain("from own_auth_accounts a");
+    expect(database.calls[0]?.sql).toContain("from own_auth_mfa_factors f");
+    expect(database.calls[0]?.sql).toContain("from own_auth_passkeys p");
+    expect(database.calls[0]?.sql).toContain("order by method");
+  });
+
+  it("atomically retains an existing Cloud configuration value", async () => {
+    const database = new RecordingD1();
+    const storage = new D1AuthStorage(database).cloudStorage;
+    database.queue([{ value: "first" }]);
+
+    await expect(storage.getOrCreateCloudConfig("challenge_keys", "second"))
+      .resolves.toBe("first");
+    expect(database.calls[0]?.sql).toContain("on conflict (key) do update");
+    expect(database.calls[0]?.sql).toContain("returning value");
+    expect(database.calls[0]?.values).toEqual(["challenge_keys", "second"]);
+  });
+
   it("creates users with parameterized SQL and maps SQLite rows", async () => {
     const database = new RecordingD1();
     const storage = new D1AuthStorage(database);

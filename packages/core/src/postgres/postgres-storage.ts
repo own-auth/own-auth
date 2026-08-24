@@ -75,12 +75,14 @@ import type { PostgresQueryable } from "./postgres-types.js";
 import { PostgresWebhookStorage } from "./postgres-webhook-storage.js";
 import { PostgresSamlStorage } from "./postgres-saml-storage.js";
 import { PostgresScimStorage } from "./postgres-scim-storage.js";
+import { PostgresCloudStorage } from "./postgres-cloud-storage.js";
 
 export class PostgresAuthStorage extends PostgresIdentityStorage implements AuthStorage {
   readonly authorizationServerStorage = new PostgresAuthorizationServerStorage(this.db);
   readonly webhookStorage = new PostgresWebhookStorage(this.db);
   readonly samlStorage = new PostgresSamlStorage(this.db);
   readonly scimStorage = new PostgresScimStorage(this.db);
+  readonly cloudStorage = new PostgresCloudStorage(this.db);
 
   async createUser(user: User): Promise<User> {
     return withPostgresIdentityErrors(async () =>

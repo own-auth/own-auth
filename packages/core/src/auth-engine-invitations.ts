@@ -27,8 +27,8 @@ import {
   requireConfiguredRole,
   requirePermission
 } from "./auth-engine-organisation-access.js";
-import { sendEmail } from "./auth-engine-delivery.js";
-import { prepareAuthEventWrite } from "./webhook-outbox.js";
+import { captureCloudDeliveryFailure, sendEmail } from "./auth-engine-delivery.js";
+import { prepareAuthEventWrite, recordCommittedAuthEvent } from "./webhook-outbox.js";
 
 export async function inviteMember(
   ctx: AuthEngineContext,
@@ -94,13 +94,14 @@ export async function inviteMember(
   });
   const url = buildUrl(ctx, "/auth/invitations/accept", { token: issued.rawToken });
 
-  await sendEmail(ctx, {
+  const deliveryFailure = await captureCloudDeliveryFailure(() => sendEmail(ctx, {
     to: email,
+    recipientUserId: invitedUser?.id,
     type: "organisation_invite",
     token: issued.rawToken,
     url,
     expiresAt: issued.token.expiresAt
-  });
+  }));
 
   await audit(ctx, {
     eventType: "member.invited",
@@ -110,7 +111,12 @@ export async function inviteMember(
     metadata: { email, role: invitation.role, invitationId: invitation.id }
   });
 
-  const result: InvitationResult<string> = { invitation };
+  const result: InvitationResult<string> = {
+    invitation,
+    delivery: deliveryFailure
+      ? { status: "failed", reason: deliveryFailure }
+      : { status: "sent" }
+  };
   if (ctx.exposeRawTokens) {
     result.token = issued.rawToken;
     result.url = url;
@@ -160,6 +166,15 @@ export async function acceptInvite(
 
   requireConfiguredRole(ctx, pendingInvitation.role);
   const now = new Date();
+  const auditEvent = createAuditEvent({
+    eventType: "invite.accepted",
+    actorUserId: user.id,
+    targetUserId: user.id,
+    organisationId,
+    request: input.request,
+    metadata: { invitationId: pendingInvitation.id },
+    now
+  });
   const accepted = await ctx.storage.acceptInvitationAtomically({
     operationId: createId("op"),
     tokenId: token.id,
@@ -168,20 +183,13 @@ export async function acceptInvite(
     userId: user.id,
     memberId: createId("mem"),
     acceptedAt: now,
-    event: prepareAuthEventWrite(ctx, createAuditEvent({
-      eventType: "invite.accepted",
-      actorUserId: user.id,
-      targetUserId: user.id,
-      organisationId,
-      request: input.request,
-      metadata: { invitationId: pendingInvitation.id },
-      now
-    }))
+    event: prepareAuthEventWrite(ctx, auditEvent)
   });
   if (!accepted) {
     await getUsableToken(ctx, input.token, "organisation_invite");
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
 
   return { organisation, member: accepted.member };
 }
@@ -202,22 +210,24 @@ export async function revokeInvitation(
   }
 
   const now = new Date();
+  const auditEvent = createAuditEvent({
+    eventType: "invite.revoked",
+    actorUserId: input.actorUserId,
+    organisationId: invitation.organisationId,
+    request: input.request,
+    metadata: { invitationId: invitation.id, email: invitation.email },
+    now
+  });
   const updatedInvitation = await ctx.storage.revokeInvitationAtomically({
     operationId: createId("op"),
     invitationId: input.invitationId,
     revokedAt: now,
-    event: prepareAuthEventWrite(ctx, createAuditEvent({
-      eventType: "invite.revoked",
-      actorUserId: input.actorUserId,
-      organisationId: invitation.organisationId,
-      request: input.request,
-      metadata: { invitationId: invitation.id, email: invitation.email },
-      now
-    }))
+    event: prepareAuthEventWrite(ctx, auditEvent)
   });
   if (!updatedInvitation) {
     throw new AuthError("invitation_not_pending", "Invitation is not pending", 409);
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
 
   return updatedInvitation;
 }

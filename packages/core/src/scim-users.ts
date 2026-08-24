@@ -19,6 +19,7 @@ import type {
   ScimUserFilter,
   ScimUserPage
 } from "./scim-types.js";
+import { recordCommittedAuthEvents } from "./webhook-outbox.js";
 import { ScimProtocolError } from "./scim-protocol-error.js";
 import {
   normalizeScimAttributes,
@@ -93,19 +94,21 @@ export async function linkUser(
   const now = new Date();
   const membership = membershipFor(connection, user.id, attributes.active, now);
   const resource = resourceFor(connection.id, user.id, membership.id, attributes, now);
+  const auditEvents = [createAuditEvent({
+    eventType: "scim.user_linked",
+    actorUserId: input.actorUserId,
+    targetUserId: user.id,
+    organisationId: connection.organisationId,
+    request: input.request,
+    metadata: { connectionId: connection.id, scimUserId: resource.id },
+    now
+  })];
   await storage.commitProvision({
     membership,
     scimUser: resource,
-    auditEvents: [createAuditEvent({
-      eventType: "scim.user_linked",
-      actorUserId: input.actorUserId,
-      targetUserId: user.id,
-      organisationId: connection.organisationId,
-      request: input.request,
-      metadata: { connectionId: connection.id, scimUserId: resource.id },
-      now
-    })]
+    auditEvents
   });
+  await recordCommittedAuthEvents(ctx, auditEvents);
   return resource;
 }
 
@@ -145,6 +148,15 @@ export async function restoreUser(
   ) throw restoreConflict();
 
   const now = new Date();
+  const auditEvent = createAuditEvent({
+    eventType: "scim.user_restored",
+    actorUserId: input.actorUserId,
+    targetUserId: resource.userId,
+    organisationId: connection.organisationId,
+    request: input.request,
+    metadata: { connectionId: connection.id, scimUserId: resource.id },
+    now
+  });
   const restored = await storage.mutateUser({
     id: resource.id,
     expectedVersion: resource.version,
@@ -155,17 +167,10 @@ export async function restoreUser(
       removedAt: null,
       updatedAt: now
     },
-    auditEvent: createAuditEvent({
-      eventType: "scim.user_restored",
-      actorUserId: input.actorUserId,
-      targetUserId: resource.userId,
-      organisationId: connection.organisationId,
-      request: input.request,
-      metadata: { connectionId: connection.id, scimUserId: resource.id },
-      now
-    })
+    auditEvent
   });
   if (!restored) throw restoreConflict();
+  await recordCommittedAuthEvents(ctx, [auditEvent]);
   return restored;
 }
 
@@ -223,6 +228,17 @@ export async function createUserResource(
     metadata: { connectionId: connection.id, scimUserId: resource.id },
     now
   })];
+  if (createUser) {
+    auditEvents.unshift(createAuditEvent({
+      eventType: "user.signed_up",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      organisationId: connection.organisationId,
+      request,
+      metadata: { provider: "scim" },
+      now
+    }));
+  }
   if (linked) {
     auditEvents.push(createAuditEvent({
       eventType: "scim.user_linked",
@@ -235,6 +251,7 @@ export async function createUserResource(
   }
   try {
     await storage.commitProvision({ user: createUser, membership, scimUser: resource, auditEvents });
+    await recordCommittedAuthEvents(ctx, auditEvents);
   } catch (error) {
     if (
       await storage.getUserByUserName(connection.id, resource.normalizedUserName) ||
@@ -296,6 +313,14 @@ export async function replaceUserResource(
   const eventType = resource.active !== attributes.active
     ? attributes.active ? "scim.user_reactivated" : "scim.user_suspended"
     : "scim.user_updated";
+  const auditEvent = createAuditEvent({
+    eventType,
+    targetUserId: resource.userId,
+    organisationId: connection.organisationId,
+    request,
+    metadata: { connectionId: connection.id, scimUserId: resource.id, fields: changed },
+    now
+  });
   const updated = await storage.mutateUser({
     id: resource.id,
     expectedVersion: resource.version,
@@ -317,16 +342,10 @@ export async function replaceUserResource(
       removedAt: null,
       updatedAt: now
     },
-    auditEvent: createAuditEvent({
-      eventType,
-      targetUserId: resource.userId,
-      organisationId: connection.organisationId,
-      request,
-      metadata: { connectionId: connection.id, scimUserId: resource.id, fields: changed },
-      now
-    })
+    auditEvent
   });
   if (!updated) throw versionConflict();
+  await recordCommittedAuthEvents(ctx, [auditEvent]);
   return updated;
 }
 
@@ -336,13 +355,21 @@ export async function deleteUserResource(
   resourceId: string,
   expectedVersion: number | null,
   request?: RequestContext
-): Promise<void> {
+): Promise<ScimUser> {
   const { storage } = requireScim(ctx);
   const resource = await getUserResource(ctx, connection.id, resourceId);
   if (expectedVersion !== null && resource.version !== expectedVersion) throw versionConflict();
   const member = await ctx.storage.getOrganisationMemberById(resource.membershipId);
   if (!member || member.role === "owner") throw uniqueness();
   const now = new Date();
+  const auditEvent = createAuditEvent({
+    eventType: "scim.user_deleted",
+    targetUserId: resource.userId,
+    organisationId: connection.organisationId,
+    request,
+    metadata: { connectionId: connection.id, scimUserId: resource.id },
+    now
+  });
   const deleted = await storage.mutateUser({
     id: resource.id,
     expectedVersion: resource.version,
@@ -352,16 +379,11 @@ export async function deleteUserResource(
       removedAt: now,
       updatedAt: now
     },
-    auditEvent: createAuditEvent({
-      eventType: "scim.user_deleted",
-      targetUserId: resource.userId,
-      organisationId: connection.organisationId,
-      request,
-      metadata: { connectionId: connection.id, scimUserId: resource.id },
-      now
-    })
+    auditEvent
   });
   if (!deleted) throw versionConflict();
+  await recordCommittedAuthEvents(ctx, [auditEvent]);
+  return deleted;
 }
 
 function membershipFor(

@@ -12,6 +12,7 @@ import {
 import type { AuthToken, TokenType } from "./types.js";
 import type { DeliveryResult } from "./auth-engine-types.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
+import { createDeliveryResult } from "./auth-engine-delivery.js";
 
 export async function issueToken(
   ctx: AuthEngineContext,
@@ -122,7 +123,7 @@ export function delivery(
   url: string,
   expiresAt: Date
 ): DeliveryResult {
-  const result: DeliveryResult = { sent: true, expiresAt };
+  const result = createDeliveryResult(expiresAt);
   if (ctx.exposeRawTokens) {
     result.token = token;
     result.url = url;

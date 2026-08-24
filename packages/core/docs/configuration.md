@@ -232,32 +232,32 @@ Organisation roles do not grant system administration access. Returning `false`,
 
 ### Email
 
-Configure `emailProvider` to send auth emails using any email service. This is not needed if you use Own Auth Delivery.
+Configure `emailProvider` to send auth emails using any email service. This is not needed if Own Auth Cloud handles delivery.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `emailProvider` | `EmailProvider` | `ConsoleEmailProvider` | Sends magic links, verification links, password reset links, and invitations. |
 
-The console provider is for development and does not send emails. In production, sending an auth email without a configured provider fails instead of silently dropping the message. Use [Own Auth Delivery](/docs/delivery/setup) for managed auth email delivery.
+The console provider is for development and does not send emails. In production, sending an auth email without a configured provider fails instead of silently dropping the message.
 
-### Managed delivery
+### Own Auth Cloud
 
-Use Own Auth Delivery to send magic links, verification links, password reset links, and invitations without connecting your own email service. See the [Delivery setup guide](/docs/delivery/setup).
+Own Auth Cloud is the optional managed operations layer. It can send auth email and SMS, sync a read replica for its dashboard, copy audit events, and return advisory security decisions. Local Own Auth remains authoritative.
 
 ```ts
-import { OwnAuthManagedEmailProvider, createOwnAuth } from "own-auth";
+import { createOwnAuth } from "own-auth";
+import { cloud } from "own-auth/cloud";
 
 export const auth = createOwnAuth({
   tokenPepper: process.env.OWN_AUTH_TOKEN_PEPPER,
-  emailProvider: new OwnAuthManagedEmailProvider({
-    deliveryKey: process.env.OWN_AUTH_EMAIL_DELIVERY_KEY,
-  }),
+  plugins: [cloud({
+    key: process.env.OWN_AUTH_CLOUD_KEY!,
+    webhookSigningSecret: process.env.OWN_AUTH_WEBHOOK_SECRET,
+  })],
 });
 ```
 
-| Option | Type | Description |
-|---|---|---|
-| `deliveryKey` | `string` | Delivery key from the Own Auth dashboard. |
+See [Own Auth Cloud](/docs/cloud) for all options and operational behavior.
 
 ### `redirectAllowlist`
 

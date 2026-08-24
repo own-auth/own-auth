@@ -32,6 +32,20 @@ export function createId(prefix: string): string {
   return `${prefix}_${randomBase64Url(16)}`;
 }
 
+export function createUuidV7(now = Date.now()): string {
+  const bytes = randomBytes(16);
+  let timestamp = BigInt(now);
+  for (let index = 5; index >= 0; index -= 1) {
+    bytes[index] = Number(timestamp & 0xffn);
+    timestamp >>= 8n;
+  }
+  bytes[6] = 0x70 | ((bytes[6] ?? 0) & 0x0f);
+  bytes[8] = 0x80 | ((bytes[8] ?? 0) & 0x3f);
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-` +
+    `${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function hashSecret(secret: string, pepper?: string): string {
   if (pepper && pepper.length > 0) {
     return createHmac("sha256", pepper).update(secret).digest("hex");

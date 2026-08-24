@@ -7,7 +7,7 @@ Invite users to join an organisation by email. The invited person receives an em
 The inviting user must have the `invite_members` permission. An administrator can invite members and administrators, but only an owner can issue an invitation for the `owner` role.
 
 ```ts
-const { invitation } = await auth.inviteMember({
+const { invitation, delivery } = await auth.inviteMember({
   organisationId: organisation.id,
   email: "bob@example.com",
   role: "member",
@@ -18,9 +18,12 @@ const { invitation } = await auth.inviteMember({
 // invitation.email     -> "bob@example.com"
 // invitation.role      -> "member"
 // invitation.expiresAt -> Date
+// delivery.status      -> "sent" | "failed"
 ```
 
 Own Auth creates the invitation, generates a single-use token, stores only its hash, and sends the invitation through the configured email provider. The email link points to the application, or to a [hosted page](/docs/hosted-auth-links) when hosted links are enabled.
+
+When Own Auth Cloud cannot queue the email, the invitation remains valid and `delivery` reports the safe failure category. This is the same delivery result used by magic links, verification emails, password resets, and SMS codes.
 
 ### Errors
 

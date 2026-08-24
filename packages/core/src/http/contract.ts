@@ -29,8 +29,21 @@ const tokenSchema = objectSchema({ token: stringSchema() }, ["token"]);
 const successSchema = objectSchema({ success: { const: true } }, ["success"]);
 const userResponseSchema = objectSchema({ user: publicAuthUserSchema }, ["user"]);
 const deliverySchema = objectSchema(
-  { sent: { type: "boolean" }, expiresAt: nullableStringSchema },
-  ["sent", "expiresAt"]
+  {
+    sent: { type: "boolean" },
+    expiresAt: nullableStringSchema,
+    delivery: objectSchema(
+      {
+        status: { type: "string", enum: ["sent", "failed"] },
+        reason: {
+          type: "string",
+          enum: ["quota_exhausted", "provider_rejected", "transient_error", "invalid_request"]
+        }
+      },
+      ["status"]
+    )
+  },
+  ["sent", "expiresAt", "delivery"]
 );
 const smsPurposeSchema: JsonSchema = {
   type: "string",

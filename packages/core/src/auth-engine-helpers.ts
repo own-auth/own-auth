@@ -1,4 +1,4 @@
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import { createId, randomBase64Url } from "./crypto.js";
 import { enforceRateLimit } from "./rate-limit.js";
 import type {
@@ -63,7 +63,7 @@ export async function audit(
     metadata?: JsonRecord;
   }
 ): Promise<void> {
-  await recordAuthEvent(ctx, createAuditEvent({
+  const event = createAuditEvent({
     eventType: input.eventType,
     actorUserId: input.actorUserId ?? null,
     targetUserId: input.targetUserId ?? null,
@@ -71,7 +71,8 @@ export async function audit(
     apiKeyId: input.apiKeyId ?? null,
     request: input.context,
     metadata: input.metadata
-  }));
+  });
+  await recordAuthEvent(ctx, event);
 }
 
 export function auditSignedIn(
@@ -198,11 +199,18 @@ export async function rateLimit(
   limit: number,
   windowMs: number
 ): Promise<void> {
-  await enforceRateLimit(ctx.rateLimitStore, {
-    key: `${action}:${identifier}`,
-    limit,
-    windowMs
-  });
+  try {
+    await enforceRateLimit(ctx.rateLimitStore, {
+      key: `${action}:${identifier}`,
+      limit,
+      windowMs
+    });
+  } catch (error) {
+    if (isAuthError(error) && error.code === "rate_limited") {
+      await ctx.cloud?.recordRateLimit(action, limit, windowMs);
+    }
+    throw error;
+  }
 }
 
 export function assertUserEnabled(user: User): void {

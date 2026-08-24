@@ -1,0 +1,45 @@
+name: Own Auth Cloud E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: own-auth-cloud-e2e
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify package against production Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      OWN_AUTH_CLOUD_E2E_ENDPOINT: ${{ secrets.OWN_AUTH_CLOUD_E2E_ENDPOINT }}
+      OWN_AUTH_CLOUD_E2E_KEY: ${{ secrets.OWN_AUTH_CLOUD_E2E_KEY }}
+      OWN_AUTH_CLOUD_E2E_MANAGEMENT_KEY: ${{ secrets.OWN_AUTH_CLOUD_E2E_MANAGEMENT_KEY }}
+      OWN_AUTH_CLOUD_E2E_APP_ID: ${{ secrets.OWN_AUTH_CLOUD_E2E_APP_ID }}
+      OWN_AUTH_CLOUD_E2E_RECIPIENT: ${{ secrets.OWN_AUTH_CLOUD_E2E_RECIPIENT }}
+      OWN_AUTH_CLOUD_E2E_APPLICATION_URL: ${{ secrets.OWN_AUTH_CLOUD_E2E_APPLICATION_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.0.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Cloud integration
+        run: pnpm cloud:e2e

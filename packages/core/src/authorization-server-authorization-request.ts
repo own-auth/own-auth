@@ -24,6 +24,7 @@ import {
   issueAuthorizationCode
 } from "./authorization-server-interaction-rules.js";
 import { AuthorizationProtocolError } from "./authorization-server-protocol-error.js";
+import { AuthError } from "./errors.js";
 import {
   protectedResourceAllowsScopes,
   resolveProtectedResource
@@ -36,7 +37,7 @@ import type {
   StoredAuthorizationRequest
 } from "./authorization-server-types.js";
 import { createId } from "./crypto.js";
-import { AuthError } from "./errors.js";
+import { isAuthError } from "./errors.js";
 
 export async function startAuthorization(
   ctx: AuthEngineContext,
@@ -167,7 +168,7 @@ function buildStoredAuthorizationRequest(
   try {
     scopes = parseRequestedScopes(config, client, input.scope);
   } catch (error) {
-    if (error instanceof AuthError) {
+    if (isAuthError(error)) {
       throw redirectError(
         "invalid_scope",
         error.safeMessage,
@@ -224,7 +225,7 @@ function buildStoredAuthorizationRequest(
       )
     };
   } catch (error) {
-    if (error instanceof AuthError) {
+    if (isAuthError(error)) {
       throw redirectError(
         "invalid_request",
         error.safeMessage,
@@ -311,7 +312,7 @@ async function enforceProtocolRateLimit(
       authorizationServerRateLimitWindowMs
     );
   } catch (error) {
-    if (error instanceof AuthError && error.code === "rate_limited") {
+    if (isAuthError(error) && error.code === "rate_limited") {
       throw redirectError(
         "temporarily_unavailable",
         "Too many authorization requests",
@@ -359,7 +360,7 @@ async function resolveRequestedResource(
         state
       );
     }
-    if (error instanceof AuthError) {
+    if (isAuthError(error)) {
       throw redirectError("invalid_target", error.safeMessage, redirectUri, state);
     }
     throw error;

@@ -1,5 +1,5 @@
 import { createId, randomBase64Url, safeEqual } from "./crypto.js";
-import { AuthError } from "./errors.js";
+import { AuthError, isAuthError } from "./errors.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
 import {
@@ -30,7 +30,7 @@ import {
   requireSaml,
   requireSamlConnection
 } from "./saml-helpers.js";
-import { prepareAuthEventWrite } from "./webhook-outbox.js";
+import { prepareAuthEventWrite, recordCommittedAuthEvent } from "./webhook-outbox.js";
 
 const tenMinutes = 10 * 60 * 1_000;
 
@@ -131,7 +131,7 @@ export async function completeResponse(
       context: input.request,
       metadata: { connectionId: connection.id, error: failure.code }
     });
-    if (failure.error instanceof AuthError) {
+    if (isAuthError(failure.error)) {
       throw new SamlCallbackError(failure.error, transaction.destination, error);
     }
     throw error;
@@ -150,18 +150,19 @@ export async function unlinkIdentity(
   if (!account) {
     throw new AuthError("invalid_credentials", "SAML identity not found", 404);
   }
+  const auditEvent = createAuditEvent({
+    eventType: "saml.identity_unlinked",
+    actorUserId: user.id,
+    targetUserId: user.id,
+    organisationId: connection.organisationId,
+    request: input.request,
+    metadata: { connectionId: connection.id }
+  });
   const removed = await ctx.storage.removeAuthenticationMethodAtomically({
     operationId: createId("op"),
     userId: user.id,
     method: { kind: "account", id: account.id },
-    event: prepareAuthEventWrite(ctx, createAuditEvent({
-      eventType: "saml.identity_unlinked",
-      actorUserId: user.id,
-      targetUserId: user.id,
-      organisationId: connection.organisationId,
-      request: input.request,
-      metadata: { connectionId: connection.id }
-    }))
+    event: prepareAuthEventWrite(ctx, auditEvent)
   });
   if (removed === "last_method") {
     throw new AuthError(
@@ -173,6 +174,7 @@ export async function unlinkIdentity(
   if (removed === "not_found") {
     throw new AuthError("invalid_credentials", "SAML identity not found", 404);
   }
+  await recordCommittedAuthEvent(ctx, auditEvent);
 }
 
 async function createAuthorizationUrl(
@@ -240,7 +242,7 @@ async function rateLimitByIp(
 }
 
 function mapProtocolError(error: unknown): { code: string; error: unknown } {
-  if (error instanceof AuthError) return { code: error.code, error };
+  if (isAuthError(error)) return { code: error.code, error };
   if (error instanceof SamlProtocolError) {
     return {
       code: error.code,

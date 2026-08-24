@@ -1,7 +1,11 @@
 import { randomBase64Url } from "./crypto.js";
 import type { AuditEventType, RequestContext, TokenType } from "./types.js";
 import type { DeliveryResult } from "./auth-engine-types.js";
-import { sendEmail } from "./auth-engine-delivery.js";
+import {
+  captureCloudDeliveryFailure,
+  createDeliveryResult,
+  sendEmail
+} from "./auth-engine-delivery.js";
 import {
   audit,
   buildUrl,
@@ -52,13 +56,16 @@ export async function requestEmailToken(
     ...input.extraUrlParams
   });
 
-  await sendEmail(ctx, {
-    to: email,
-    type: input.emailType,
-    token: issued.rawToken,
-    url,
-    expiresAt: issued.token.expiresAt
-  });
+  const deliveryFailure = await captureCloudDeliveryFailure(() =>
+    sendEmail(ctx, {
+      to: email,
+      recipientUserId: user?.id,
+      type: input.emailType,
+      token: issued.rawToken,
+      url,
+      expiresAt: issued.token.expiresAt
+    })
+  );
 
   await audit(ctx, {
     eventType: input.auditEvent,
@@ -67,5 +74,13 @@ export async function requestEmailToken(
     context: input.request
   });
 
-  return delivery(ctx, issued.rawToken, url, issued.token.expiresAt);
+  if (!deliveryFailure) {
+    return delivery(ctx, issued.rawToken, url, issued.token.expiresAt);
+  }
+  const result = createDeliveryResult(issued.token.expiresAt, deliveryFailure);
+  if (ctx.exposeRawTokens) {
+    result.token = issued.rawToken;
+    result.url = url;
+  }
+  return result;
 }

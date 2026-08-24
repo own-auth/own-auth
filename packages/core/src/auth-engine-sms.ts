@@ -13,7 +13,11 @@ import {
 } from "./auth-engine-internals.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
 import { createUser } from "./auth-engine-users.js";
-import { sendSms } from "./auth-engine-delivery.js";
+import {
+  captureCloudDeliveryFailure,
+  createDeliveryResult,
+  sendSms
+} from "./auth-engine-delivery.js";
 
 export async function requestSmsOtp(
   ctx: AuthEngineContext,
@@ -65,12 +69,9 @@ export async function requestSmsOtp(
     lastSentAt: now
   });
 
-  await sendSms(ctx, {
-    to: phone,
-    purpose,
-    code,
-    expiresAt
-  });
+  const deliveryFailure = await captureCloudDeliveryFailure(() =>
+    sendSms(ctx, { to: phone, recipientUserId: user?.id, purpose, code, expiresAt })
+  );
 
   await audit(ctx, {
     eventType: "sms_otp.sent",
@@ -80,7 +81,7 @@ export async function requestSmsOtp(
     metadata: { purpose, otpId: otp.id }
   });
 
-  const delivery: DeliveryResult = { sent: true, expiresAt };
+  const delivery = createDeliveryResult(expiresAt, deliveryFailure);
   if (ctx.exposeRawTokens) {
     delivery.code = code;
   }
@@ -119,12 +120,14 @@ export async function verifySmsOtp(
   }
 
   let user = otp.userId ? await ctx.storage.getUserById(otp.userId) : null;
+  let created = false;
   if (!user) {
     user = await ctx.storage.getUserByPhone(phone);
   }
 
   if (!user && purpose === "phone_login" && ctx.allowPhoneSignup) {
     user = await createUser(ctx, { phone });
+    created = true;
   }
 
   if (!user) {
@@ -149,6 +152,16 @@ export async function verifySmsOtp(
     throw new AuthError("user_not_found", "User not found", 404);
   }
   user = updatedUser;
+
+  if (created) {
+    await audit(ctx, {
+      eventType: "user.signed_up",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      context: input.request,
+      metadata: { provider: "phone" }
+    });
+  }
 
   await audit(ctx, {
     eventType: "sms_otp.verified",
