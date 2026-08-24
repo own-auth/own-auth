@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.12
+
 ### Added
 
 - Added the built-in `cloud()` plugin, `cloudClient()`, `cloudNativeClient()`, and `own-auth/challenge-solver` subpath for Own Auth Cloud.
