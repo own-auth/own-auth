@@ -21,6 +21,7 @@ import {
   createSession,
   hash,
   markUserLoggedIn,
+  rateLimit,
   requireActiveUser,
   type AuthEngineContext
 } from "./auth-engine-internals.js";
@@ -121,11 +122,7 @@ export async function confirmTotpEnrollment(
   if (!factor || factor.userId !== user.id || factor.status !== "pending") {
     throw new AuthError("mfa_code_invalid", "TOTP enrollment is invalid", 400);
   }
-  const secret = await decryptTotpSecret(ctx, factor);
-  const timestep = validateTotp(secret, input.code);
-  if (timestep === null) {
-    throw new AuthError("mfa_code_invalid", "Invalid authentication code", 401);
-  }
+  const timestep = await verifyTotpCode(ctx, factor, input.code);
   const activated = await ctx.storage.activateTotpFactor(factor.id, timestep, new Date());
   if (!activated) {
     throw new AuthError("mfa_code_invalid", "TOTP enrollment is no longer pending", 409);
@@ -305,15 +302,25 @@ async function verifyAndConsumeTotp(
   factor: TotpFactor,
   code: string
 ): Promise<void> {
+  const timestep = await verifyTotpCode(ctx, factor, code);
+  const consumed = await ctx.storage.useTotpTimestep(factor.id, timestep, new Date());
+  if (!consumed) {
+    throw new AuthError("mfa_timestep_reused", "Authentication code was already used", 401);
+  }
+}
+
+async function verifyTotpCode(
+  ctx: AuthEngineContext,
+  factor: TotpFactor,
+  code: string
+): Promise<number> {
+  await rateLimit(ctx, "totp-verify", factor.userId, ctx.mfaMaxAttempts, ctx.mfaChallengeTtlMs);
   const secret = await decryptTotpSecret(ctx, factor);
   const timestep = validateTotp(secret, code);
   if (timestep === null) {
     throw new AuthError("mfa_code_invalid", "Invalid authentication code", 401);
   }
-  const consumed = await ctx.storage.useTotpTimestep(factor.id, timestep, new Date());
-  if (!consumed) {
-    throw new AuthError("mfa_timestep_reused", "Authentication code was already used", 401);
-  }
+  return timestep;
 }
 
 async function decryptTotpSecret(ctx: AuthEngineContext, factor: TotpFactor): Promise<string> {

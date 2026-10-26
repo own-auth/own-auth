@@ -1,6 +1,7 @@
 import type { RateLimitStore } from "../../src/rate-limit.js";
 import type { AuthStorage } from "../../src/storage.js";
 import type { AtomicAuthEventWrite } from "../../src/auth-storage-atomic.js";
+import { totpRateLimitAdapterCases } from "./totp-rate-limit-cases.js";
 import {
   assertConformanceArrayEqual,
   assertConformanceEqual,
@@ -23,6 +24,7 @@ export interface AtomicAdapterCase {
 }
 
 export const atomicAdapterCases: readonly AtomicAdapterCase[] = [
+  ...totpRateLimitAdapterCases,
   {
     name: "allows only one connection to consume a token",
     async run({ storage }) {

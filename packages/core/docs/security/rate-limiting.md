@@ -9,6 +9,7 @@ Own Auth applies built-in rate limits to sensitive authentication entry points. 
 | Sign up | Normalised email | 5 | 10 minutes |
 | Password sign in | Normalised email | 10 | 10 minutes |
 | Change password | User ID | 5 | 10 minutes |
+| TOTP checks for enrollment, login, disabling TOTP, and recovery code regeneration | User ID shared across all four actions and all sessions | 5 | 5 minutes |
 | Magic-link request | Normalised email | 5 | 10 minutes |
 | Email-verification request | Normalised email | 5 | 10 minutes |
 | Password-reset request | Normalised email | 5 | 15 minutes |
@@ -34,6 +35,8 @@ Own Auth applies built-in rate limits to sensitive authentication entry points. 
 These limits reduce password guessing, credential stuffing, repeated email and SMS sends, excessive invitations, and excessive key creation.
 
 SMS codes allow five wrong guesses by default. MFA challenges also allow five failed attempts by default. These per-credential attempt limits are enforced separately from the shared rate-limit store through `sms.maxAttempts` and `mfa.maxAttempts`.
+
+TOTP also uses one shared per user verification budget. Its allowance is `mfa.maxAttempts` and its window is `mfa.challengeTtlMs`. Every check counts, including successful and replayed codes. The attempt is reserved before decrypting or checking the code. New sessions, enrollments, and login challenges cannot reset it. A store failure rejects the operation before verification or an MFA change.
 
 ## What happens when a limit is exceeded
 
@@ -76,6 +79,8 @@ const auth = createOwnAuth({
 ## Configuration
 
 Most built-in core operation limits and windows are not configurable. Protected-resource operators can size remote introspection for their traffic with `authorizationServer.resourceIntrospectionRequestsPerMinute` and `authorizationServer.failedIntrospectionAttemptsPerMinute`. SCIM operators can configure `scim.requestLimit`, `scim.requestWindowMs`, `scim.failedAuthLimit`, and `scim.failedAuthWindowMs`. Authenticated SCIM traffic shares one limit per connection. Failed SCIM authentication is limited only when the handler receives a trusted IP address through `getRequestContext`.
+
+The MFA settings also configure the shared TOTP budget as described above. When supplying custom authentication storage, supply a shared durable `rateLimitStore` too. Process memory cannot preserve counters across application restarts or share them across separate instances.
 
 Plugins may declare their own namespaced endpoint rate limits, but cannot replace or weaken core limits.
 

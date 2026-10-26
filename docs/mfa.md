@@ -29,6 +29,14 @@ const auth = createOwnAuth({
 
 The current key encrypts new records. Previous keys decrypt existing records so Own Auth can re-encrypt them with the current key after a successful read.
 
+## Authenticator attempt limit
+
+All TOTP checks share one budget per user, including enrollment confirmation, login, disabling TOTP, and regenerating recovery codes. The default allows five checks per five minutes. The allowance uses `mfa.maxAttempts` and the window uses `mfa.challengeTtlMs`. Each check reserves an attempt before decrypting or validating a code. Successful checks and replayed codes count too.
+
+Switching sessions, starting another enrollment, or requesting another login challenge does not reset the budget. Requests beyond the allowance return `rate_limited` with HTTP 429. Wait until the existing window expires before trying again. The login challenge also retains its own attempt and expiry checks.
+
+The budget uses the configured `rateLimitStore`. Postgres and D1 persistence helpers supply a database store shared across instances. Applications supplying custom storage must also supply a shared durable rate limit store for production. An unavailable store rejects the operation before checking the code or changing MFA.
+
 ## Enroll TOTP
 
 ```ts

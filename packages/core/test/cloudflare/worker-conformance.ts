@@ -39,10 +39,16 @@ import {
 } from "./conformance-protocol.js";
 import { invokeConformanceRpc, readConformanceRpc } from "./worker-rpc.js";
 
-const authMethods = new Set<string>(persistenceConformanceAuthMethods);
+const authMethods = new Set<string>([
+  ...persistenceConformanceAuthMethods,
+  "completeMfaWithTotp",
+  "disableTotp",
+  "regenerateRecoveryCodes"
+]);
 
 const storageMethods = new Set([
   "acceptInvitationAtomically",
+  "activateTotpFactor",
   "consumeMfaChallenge",
   "consumeOAuthTransaction",
   "consumeRecoveryCode",
@@ -63,12 +69,18 @@ const storageMethods = new Set([
   "createUser",
   "createWebAuthnChallenge",
   "getLatestSmsOtp",
+  "getActiveTotpFactorByUserId",
   "getInvitationById",
   "getPasskeyCredentialById",
+  "getMfaChallengeByTokenHash",
+  "getSessionByTokenHash",
   "getTokenByHash",
+  "getTotpFactorById",
   "getUserByEmail",
+  "getUserById",
   "getUserByPhone",
   "incrementSmsOtpAttempts",
+  "incrementMfaChallengeAttempts",
   "listAuditEvents",
   "listAccountsByUserId",
   "listOrganisationMembers",
@@ -80,6 +92,9 @@ const storageMethods = new Set([
   "revokeInvitationAtomically",
   "rotateOAuthCredential",
   "updatePasskeyCounter",
+  "updateSession",
+  "updateTotpFactor",
+  "updateUser",
   "upsertOAuthCredential",
   "useTotpTimestep"
 ]);

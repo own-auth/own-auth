@@ -421,8 +421,8 @@ Key IDs must be unique, non-empty, and at most 64 characters. Enabling `offlineA
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `mfa.issuer` | `string` | `Own Auth` | Issuer shown by authenticator applications. |
-| `mfa.challengeTtlMs` | `number` | `300000` (5 minutes) | How long a pending second-factor challenge remains valid. |
-| `mfa.maxAttempts` | `number` | `5` | Failed attempts allowed before a challenge is unusable. |
+| `mfa.challengeTtlMs` | `number` | `300000` (5 minutes) | How long a pending second factor challenge remains valid. Also sets the shared per user TOTP verification window. |
+| `mfa.maxAttempts` | `number` | `5` | Failed attempts allowed before a login challenge is unusable. Also limits all TOTP checks per user in each verification window, including successful checks, enrollment, and settings actions. |
 | `mfa.recoveryCodeCount` | `number` | `10` | Recovery codes generated after TOTP confirmation. |
 
 The numeric MFA options must be positive integers. TOTP enrollment requires `encryption`. See [Multi-Factor Authentication](/docs/mfa).

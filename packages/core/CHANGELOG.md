@@ -4,6 +4,8 @@
 
 ### Security
 
+- TOTP enrollment, login, disabling TOTP, and recovery code regeneration now share one per user verification budget through the configured rate limit store. The default allows five checks per five minutes. Changing sessions or challenges cannot reset the budget, and storage failures reject verification.
+
 - OAuth sign in and linking now require proof from the browser that started the transaction. The HTTP handler manages a temporary cookie for each attempt, including popup and Apple form callbacks.
 
 ### Breaking changes

@@ -334,16 +334,16 @@ const ownAuthEndpointSpecs = {
   confirmTotpEnrollment: endpoint("POST", "/mfa/totp/confirm", "Confirm TOTP enrollment", {
     request: objectSchema({ factorId: stringSchema(), code: stringSchema() }, ["factorId", "code"]),
     response: objectSchema({ recoveryCodes: { type: "array", items: stringSchema() } }, ["recoveryCodes"]),
-    errors: ["invalid_session", "mfa_code_invalid"], session: "required"
+    errors: ["invalid_session", "mfa_code_invalid", "rate_limited"], session: "required"
   }),
   disableTotp: endpoint("POST", "/mfa/totp/disable", "Disable TOTP", {
     request: objectSchema({ code: stringSchema() }, ["code"]), response: successSchema,
-    errors: ["invalid_session", "mfa_code_invalid", "mfa_timestep_reused"], session: "required"
+    errors: ["invalid_session", "mfa_code_invalid", "mfa_timestep_reused", "rate_limited"], session: "required"
   }),
   regenerateRecoveryCodes: endpoint("POST", "/mfa/recovery/regenerate", "Regenerate recovery codes", {
     request: objectSchema({ code: stringSchema() }, ["code"]),
     response: objectSchema({ recoveryCodes: { type: "array", items: stringSchema() } }, ["recoveryCodes"]),
-    errors: ["invalid_session", "mfa_code_invalid", "mfa_timestep_reused"], session: "required"
+    errors: ["invalid_session", "mfa_code_invalid", "mfa_timestep_reused", "rate_limited"], session: "required"
   }),
   beginPasskeyRegistration: endpoint("POST", "/passkeys/register/options", "Create passkey registration options", {
     response: objectSchema({ options: openObjectSchema }, ["options"]), errors: ["invalid_session", "validation_error"], session: "required"

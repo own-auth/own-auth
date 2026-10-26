@@ -36,6 +36,7 @@ TOTP, recovery codes, and passkeys can complete a pending second-factor challeng
 
 - TOTP uses SHA-1, six digits, 30-second periods, and a one-step clock tolerance.
 - A successfully used TOTP timestep is recorded through an atomic comparison update and cannot be reused.
+- Every TOTP check reserves one attempt in a shared per user budget before code decryption or verification. Enrollment confirmation, login, disabling TOTP, and recovery code regeneration share this budget across sessions and challenges. The default is five checks per five minutes, using `mfa.maxAttempts` and `mfa.challengeTtlMs`. Successful checks also count. The configured rate limit store owns expiry and atomic increments. Production instances must share a durable store, and store failures reject verification.
 - Recovery codes are random, independently hashed, shown once, and atomically consumed.
 - Regenerating recovery codes invalidates every previous code.
 - Successful MFA creates an `aal2` session containing both authentication methods.
