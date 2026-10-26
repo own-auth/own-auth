@@ -360,6 +360,8 @@ export { OWN_AUTH_VERSION } from "./version.js";
 export { InMemoryAuthStorage } from "./memory-storage.js";
 export type {
   AtomicAuthEventWrite,
+  AtomicEmailOwnershipInput,
+  AtomicEmailOwnershipResult,
   AtomicAuthenticationMethodRemovalInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,

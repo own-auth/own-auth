@@ -437,6 +437,9 @@ function createDefaultPersistence(storage?: AuthStorage): {
   close(): Promise<void>;
 } {
   if (storage) {
+    if (typeof storage.claimEmailOwnershipAtomically !== "function") {
+      throw new Error("AuthStorage must implement claimEmailOwnershipAtomically before accepting email ownership claims.");
+    }
     return {
       storage,
       rateLimitStore: new InMemoryRateLimitStore(),

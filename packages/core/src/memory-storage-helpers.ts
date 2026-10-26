@@ -2,6 +2,13 @@ export function cloneStored<T>(value: T): T {
   return structuredClone(value);
 }
 
+export function someStored<T>(store: ReadonlyMap<string, T>, predicate: (value: T) => boolean): boolean {
+  for (const value of store.values()) {
+    if (predicate(value)) return true;
+  }
+  return false;
+}
+
 export function findStored<T>(
   store: ReadonlyMap<string, T>,
   predicate: (value: T) => boolean

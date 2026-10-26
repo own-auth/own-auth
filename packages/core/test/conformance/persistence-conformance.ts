@@ -55,7 +55,7 @@ export async function runPersistenceConformance(
     verification.token,
     "Email-verification token was not exposed"
   );
-  const verifiedUser = await auth.verifyEmail({ token: verificationToken });
+  const verifiedUser = await auth.verifyEmail({ token: verificationToken, sessionToken: signup.sessionToken });
   assertConformance(
     verifiedUser.emailVerifiedAt instanceof Date,
     "Email verification was not persisted"

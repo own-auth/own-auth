@@ -33,10 +33,13 @@ When the user opens the link, extract the token and verify it in the backend:
 ```ts
 const user = await auth.verifyEmail({
   token: tokenFromUrl,
+  sessionToken: existingSessionToken,
 });
 ```
 
 Own Auth consumes the token and sets `user.emailVerifiedAt` to the current time. It does not create another session.
+
+Pass the existing session token from trusted request credentials to keep the pending account and its data. The HTTP handler does this automatically. Without proof of the original account, a pending email with earlier credentials or access is claimed by a separate verified user. Use the returned user ID as the result. The earlier account loses this email and its sessions are revoked. The client clears its cached session if the returned user is different. To retain a pending account when opening the link on another device, first sign in to that original account on that device.
 
 ### Errors
 
@@ -84,7 +87,7 @@ Use the same method to send another verification email:
 await auth.requestEmailVerification({ email });
 ```
 
-Each request creates a new single-use token. Earlier unused links remain valid until they are used or reach their expiry time. Own Auth allows up to five verification-email requests per address every ten minutes.
+Each request creates a separate token that can be used once. Earlier unused links remain valid until use or expiry while the original user still owns the email. Account separation makes its earlier email proofs invalid. Own Auth allows up to five verification email requests per address every ten minutes.
 
 ## How verification tokens are stored
 

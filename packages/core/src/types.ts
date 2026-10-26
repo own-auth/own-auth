@@ -42,6 +42,8 @@ export const coreAuditEventTypes = [
   "user.signed_out",
   "user.disabled",
   "user.re_enabled",
+  "email.removed",
+  "email.membership_reassigned",
   "admin.users_listed",
   "admin.user_viewed",
   "admin.sessions_listed",

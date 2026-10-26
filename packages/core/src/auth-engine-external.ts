@@ -25,6 +25,7 @@ import {
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
+import { claimEmailOwnership } from "./auth-engine-email-ownership.js";
 import { prepareAuthEventWrite, recordCommittedAuthEvent } from "./webhook-outbox.js";
 
 export async function signInWithVerifiedExternalIdentity(
@@ -91,34 +92,24 @@ export async function unlinkOAuthProvider(
   await recordCommittedAuthEvent(ctx, auditEvent);
 }
 
+interface ExternalIdentityResolutionInput {
+  intent: "sign_in" | "link";
+  userId?: string;
+  request?: RequestContext;
+  metadata?: Record<string, unknown>;
+}
+
 export async function resolveExternalIdentity(
   ctx: AuthEngineContext,
   identity: VerifiedProviderIdentity,
-  input: {
-    intent: "sign_in" | "link";
-    userId?: string;
-    request?: RequestContext;
-    metadata?: Record<string, unknown>;
-  }
+  input: ExternalIdentityResolutionInput
 ): Promise<{ user: User; account: Account }> {
   const existingAccount = await ctx.storage.getAccountByProvider(
     identity.provider,
     identity.providerAccountId
   );
   if (existingAccount) {
-    if (input.intent === "link" && existingAccount.userId !== input.userId) {
-      throw new AuthError(
-        "oauth_account_conflict",
-        "This provider account is linked to another user",
-        409
-      );
-    }
-    const user = await ctx.storage.getUserById(existingAccount.userId);
-    if (!user) {
-      throw new AuthError("invalid_credentials", "Invalid external provider account", 401);
-    }
-    assertUserEnabled(user);
-    return { user, account: existingAccount };
+    return resolveLinkedExternalIdentity(ctx, identity, existingAccount, input);
   }
 
   const email = verifiedEmail(identity);
@@ -126,7 +117,12 @@ export async function resolveExternalIdentity(
     if (!input.userId) {
       throw new AuthError("validation_error", "userId is required when linking a provider", 400);
     }
-    const user = await requireActiveUser(ctx, input.userId);
+    let user = await requireActiveUser(ctx, input.userId);
+    if (email && email === user.email) {
+      user = await claimEmailOwnership(ctx, {
+        user, email, proof: { kind: "provider", originalActorUserId: input.userId }, request: input.request
+      });
+    }
     const account = await createLinkedAccount(ctx, user, identity, email, input.request);
     return { user, account };
   }
@@ -140,19 +136,50 @@ export async function resolveExternalIdentity(
   }
   const existingUser = await ctx.storage.getUserByEmail(email);
   if (existingUser) {
-    assertUserEnabled(existingUser);
-    if (ctx.oauthAccountLinking !== "verified_email") {
-      throw new AuthError(
-        "account_linking_required",
-        "Sign in to the existing account before linking this provider",
-        409
-      );
-    }
-    const account = await createLinkedAccount(ctx, existingUser, identity, email, input.request);
-    return { user: existingUser, account };
+    return linkExternalIdentityByEmail(ctx, identity, existingUser, email, input);
   }
 
   return createExternalUserAndAccount(ctx, identity, email, input);
+}
+
+async function resolveLinkedExternalIdentity(
+  ctx: AuthEngineContext,
+  identity: VerifiedProviderIdentity,
+  account: Account,
+  input: ExternalIdentityResolutionInput
+): Promise<{ user: User; account: Account }> {
+  if (input.intent === "link" && account.userId !== input.userId) {
+    throw new AuthError("oauth_account_conflict", "This provider account is linked to another user", 409);
+  }
+  let user = await ctx.storage.getUserById(account.userId);
+  if (!user) throw new AuthError("invalid_credentials", "Invalid external provider account", 401);
+  const email = verifiedEmail(identity);
+  if (email && email === user.email) {
+    user = await claimEmailOwnership(ctx, {
+      user, email, proof: { kind: "provider", originalActorUserId: input.userId },
+      verifiedAccountId: account.id, request: input.request
+    });
+  }
+  assertUserEnabled(user);
+  return { user, account: { ...account, userId: user.id } };
+}
+
+async function linkExternalIdentityByEmail(
+  ctx: AuthEngineContext,
+  identity: VerifiedProviderIdentity,
+  user: User,
+  email: string,
+  input: ExternalIdentityResolutionInput
+): Promise<{ user: User; account: Account }> {
+  if (user.emailVerifiedAt) assertUserEnabled(user);
+  if (ctx.oauthAccountLinking !== "verified_email") {
+    throw new AuthError("account_linking_required", "Sign in to the existing account before linking this provider", 409);
+  }
+  const owner = await claimEmailOwnership(ctx, {
+    user, email, proof: { kind: "provider", originalActorUserId: input.userId }, request: input.request
+  });
+  const account = await createLinkedAccount(ctx, owner, identity, email, input.request);
+  return { user: owner, account };
 }
 
 function normalizeTrustedIdentity(input: VerifiedExternalIdentityInput): VerifiedProviderIdentity {
@@ -231,7 +258,7 @@ async function createExternalUserAndAccount(
   ctx: AuthEngineContext,
   identity: VerifiedProviderIdentity,
   email: string,
-  input: { request?: RequestContext; metadata?: Record<string, unknown> }
+  input: ExternalIdentityResolutionInput
 ): Promise<{ user: User; account: Account }> {
   const now = new Date();
   const user = userFor({
@@ -269,30 +296,12 @@ async function createExternalUserAndAccount(
       identity.providerAccountId
     );
     if (account) {
-      const winner = await ctx.storage.getUserById(account.userId);
-      if (winner) {
-        return { user: winner, account };
-      }
+      return resolveLinkedExternalIdentity(ctx, identity, account, input);
     }
 
     const existingUser = await ctx.storage.getUserByEmail(email);
     if (existingUser) {
-      assertUserEnabled(existingUser);
-      if (ctx.oauthAccountLinking !== "verified_email") {
-        throw new AuthError(
-          "account_linking_required",
-          "Sign in to the existing account before linking this provider",
-          409
-        );
-      }
-      const linkedAccount = await createLinkedAccount(
-        ctx,
-        existingUser,
-        identity,
-        email,
-        input.request
-      );
-      return { user: existingUser, account: linkedAccount };
+      return linkExternalIdentityByEmail(ctx, identity, existingUser, email, input);
     }
     throw error;
   }

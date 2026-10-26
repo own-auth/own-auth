@@ -22,6 +22,8 @@ import type {
 } from "./identity-types.js";
 import type {
   AtomicAuthenticationMethodRemovalInput,
+  AtomicEmailOwnershipInput,
+  AtomicEmailOwnershipResult,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -49,6 +51,8 @@ export interface ListUsersFilter {
 }
 
 export interface AuthStorage {
+  /** Atomically establishes email ownership without inheriting an unproved identity. */
+  claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null>;
   createUser(user: User): Promise<User>;
   updateUser(id: string, patch: Partial<User>): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;

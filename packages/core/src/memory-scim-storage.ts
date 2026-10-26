@@ -19,6 +19,23 @@ interface MemoryScimRecords {
 }
 
 export class MemoryScimStorage implements ScimStorage {
+  /** @internal Runs inside the parent storage's synchronous email ownership operation. */
+  reassignEmailOwner(sourceUserId: string, ownerUserId: string, email: string, at: Date): OrganisationMember<string>[] {
+    const memberships: OrganisationMember<string>[] = [];
+    for (const resource of this.scimUsers.values()) {
+      if (resource.userId !== sourceUserId || resource.normalizedEmail !== email || resource.deletedAt) continue;
+      const membership = this.records.members.get(resource.membershipId);
+      if (membership?.userId === sourceUserId) {
+        const reassigned = { ...membership, userId: ownerUserId, updatedAt: at };
+        this.records.members.set(membership.id, reassigned);
+        memberships.push(cloneStored(reassigned));
+      }
+      this.scimUsers.set(resource.id, {
+        ...resource, userId: ownerUserId, version: resource.version + 1, updatedAt: at
+      });
+    }
+    return memberships;
+  }
   private readonly connections = new Map<string, ScimConnection>();
   private readonly tokens = new Map<string, ScimToken>();
   private readonly scimUsers = new Map<string, ScimUser>();

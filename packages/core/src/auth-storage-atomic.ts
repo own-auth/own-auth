@@ -1,9 +1,36 @@
 import type { StoredWebhookEvent } from "./webhook-types.js";
 import type {
+  Account,
   AuditEvent,
   Invitation,
-  OrganisationMember
+  OrganisationMember,
+  Session,
+  User
 } from "./types.js";
+
+export interface AtomicEmailOwnershipInput {
+  operationId: string;
+  sourceUserId: string | null;
+  email: string;
+  verifiedAt: Date;
+  replacementUser: User;
+  replacementAccount: Account;
+  proof:
+    | { kind: "token"; tokenHash: string; type: "magic_link" | "email_verification" | "password_reset" }
+    | { kind: "provider"; originalActorUserId?: string };
+  sessionTokenHash: string | null;
+  /** Only the provider identity independently verified by this request may move. */
+  verifiedAccountId?: string;
+  passwordHash?: string;
+}
+
+export interface AtomicEmailOwnershipResult {
+  user: User;
+  created: boolean;
+  verified: boolean;
+  revokedSessions: Session[];
+  reassignedMemberships: OrganisationMember<string>[];
+}
 
 export interface AtomicWebhookDeliverySeed {
   id: string;

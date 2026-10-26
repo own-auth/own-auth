@@ -10,12 +10,19 @@ import type {
 import {
   cloneStored,
   findStored,
+  someStored,
   updateStoredEntity
 } from "./memory-storage-helpers.js";
 import { createIdentityConflictError } from "./errors.js";
 import type { Account } from "./types.js";
 
 export class MemoryIdentityStorage {
+  protected hasUnprovedCredentials(userId: string, verifiedAccountId?: string): boolean {
+    return someStored(this.accounts, (account) => account.userId === userId &&
+      account.provider !== "password" && account.provider !== "magic_link" && account.id !== verifiedAccountId) ||
+      [this.passkeys, this.totpFactors, this.recoveryCodes, this.mfaChallenges, this.webAuthnChallenges]
+        .some((records) => someStored<{ userId: string | null }>(records, (record) => record.userId === userId));
+  }
   protected readonly accounts = new Map<string, Account>();
   private readonly oauthTransactions = new Map<string, OAuthTransaction>();
   private readonly oauthCredentials = new Map<string, OAuthCredential>();

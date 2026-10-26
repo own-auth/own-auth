@@ -16,6 +16,7 @@ type Auth = ReturnType<typeof createOwnAuth>;
 
 export type StorageBarrierMethod =
   | "acceptInvitationAtomically"
+  | "claimEmailOwnershipAtomically"
   | "createUser"
   | "consumeToken"
   | "consumeSmsOtp"
@@ -65,7 +66,7 @@ export const authConcurrencyCases: readonly AuthConcurrencyCase[] = [
   },
   {
     name: "allows only one concurrent magic-link verification",
-    barrierMethod: "consumeToken",
+    barrierMethod: "claimEmailOwnershipAtomically",
     async run({ auth, storage }) {
       const email = uniqueEmail("magic");
       const delivery = await auth[0].requestMagicLink({ email });
@@ -89,7 +90,7 @@ export const authConcurrencyCases: readonly AuthConcurrencyCase[] = [
   },
   {
     name: "allows only one concurrent email verification",
-    barrierMethod: "consumeToken",
+    barrierMethod: "claimEmailOwnershipAtomically",
     async run({ auth, storage }) {
       const email = uniqueEmail("verify");
       await auth[0].signUpEmailPassword({ email, password: "correct-horse" });
@@ -112,7 +113,7 @@ export const authConcurrencyCases: readonly AuthConcurrencyCase[] = [
   },
   {
     name: "allows only one concurrent password reset",
-    barrierMethod: "consumeToken",
+    barrierMethod: "claimEmailOwnershipAtomically",
     async run({ auth }) {
       const email = uniqueEmail("reset");
       await auth[0].signUpEmailPassword({ email, password: "correct-horse" });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createOwnAuthScimHandler } from "../../src/scim-http.js";
 import { SamlProtocolError } from "../../src/saml.js";
 import { createSamlHarness, required } from "./saml-test-harness.js";
@@ -74,6 +74,27 @@ describe("SAML authentication", () => {
     await expect(harness.complete()).rejects.toMatchObject({
       code: "saml_transaction_invalid"
     });
+  });
+
+  it("checks mailbox ownership when concurrent provisioning finds a linked SAML account", async () => {
+    const harness = await createSamlHarness();
+    let concurrentSignup: Awaited<ReturnType<typeof harness.auth.signUpEmailPassword>> | undefined;
+    vi.spyOn(harness.storage.samlStorage, "commitIdentity").mockImplementationOnce(async (commit) => {
+      if (!commit.user || !commit.account) throw new Error("Expected a new SAML identity");
+      concurrentSignup = await harness.auth.signUpEmailPassword({
+        email: harness.provider.email, password: "attacker-password"
+      });
+      await harness.storage.createAccount({ ...commit.account, userId: concurrentSignup.user.id });
+      throw new Error("Concurrent SAML identity creation");
+    });
+    await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
+    const result = await harness.complete();
+    if (result.status !== "complete" || !concurrentSignup) throw new Error("Expected completed SAML sign in and race fixture");
+    expect(result.user.id).not.toBe(concurrentSignup.user.id);
+    expect(result.user.passwordHash).toBeNull();
+    expect(await harness.auth.getCurrentSession(concurrentSignup.sessionToken)).toBeNull();
+    expect((await harness.storage.listAccountsByUserId(result.user.id))
+      .some((account) => account.provider === `saml.${harness.connection.key}`)).toBe(true);
   });
 
   it("rejects a claimed assertion on a different transaction", async () => {

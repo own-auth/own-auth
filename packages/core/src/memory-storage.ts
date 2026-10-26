@@ -1,6 +1,8 @@
 import type {
   AtomicAuthEventWrite,
   AtomicAuthenticationMethodRemovalInput,
+  AtomicEmailOwnershipInput,
+  AtomicEmailOwnershipResult,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -16,6 +18,7 @@ import { MemoryIdentityStorage } from "./memory-identity-storage.js";
 import {
   cloneStored as clone,
   findStored,
+  someStored,
   updateStoredEntity
 } from "./memory-storage-helpers.js";
 import { createIdentityConflictError } from "./errors.js";
@@ -47,6 +50,71 @@ function isUsableSmsOtp(otp: SmsOtp, at: Date): boolean {
 }
 
 export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthStorage {
+  async claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
+    const source = input.sourceUserId ? this.users.get(input.sourceUserId) : undefined;
+    const proof = input.proof;
+    const token = proof.kind === "token"
+      ? findStored(this.tokens, (candidate) =>
+          candidate.tokenHash === proof.tokenHash && candidate.type === proof.type &&
+          candidate.email === input.email && (!candidate.userId || candidate.userId === input.sourceUserId) &&
+          !candidate.usedAt && candidate.expiresAt > input.verifiedAt)
+      : undefined;
+    if (input.proof.kind === "token" && !token) return null;
+    if (input.sourceUserId && (!source || source.email !== input.email ||
+      (source.emailVerifiedAt && source.disabledAt &&
+        !(input.proof.kind === "token" && input.proof.type === "password_reset")))) return null;
+    if (!source && someStored(this.users, (user) => user.email === input.email)) return null;
+    const originalSession = source && someStored(this.sessions, (session) =>
+      session.userId === source.id && session.tokenHash === input.sessionTokenHash &&
+      !session.revokedAt && session.expiresAt > input.verifiedAt && session.idleExpiresAt > input.verifiedAt);
+    const noUnprovedAccess = source && !source.passwordHash && !source.phone &&
+      !someStored(this.sessions, (session) => session.userId === source.id) &&
+      !someStored(this.apiKeys, (key) => key.userId === source.id) &&
+      !someStored(this.organisations, (organisation) => organisation.ownerUserId === source.id) &&
+      !this.authorizationServerStorage.hasUserAuthorization(source.id) &&
+      !this.hasUnprovedCredentials(source.id, input.verifiedAccountId);
+    const keep = source && (source.emailVerifiedAt !== null || (!source.disabledAt &&
+      (originalSession || noUnprovedAccess ||
+        (input.proof.kind === "provider" && input.proof.originalActorUserId === source.id))));
+    const owner: User = keep ? {
+      ...source,
+      emailVerifiedAt: source.emailVerifiedAt ?? input.verifiedAt,
+      ...(input.passwordHash === undefined ? {} : { passwordHash: input.passwordHash }),
+      updatedAt: input.verifiedAt
+    } : clone(input.replacementUser);
+    if (!keep && this.users.has(owner.id)) throw createIdentityConflictError("email");
+    if (!keep && (this.accounts.has(input.replacementAccount.id) ||
+      someStored(this.accounts, (account) => account.provider === input.replacementAccount.provider &&
+        account.providerAccountId === input.replacementAccount.providerAccountId &&
+        !(source && account.userId === source.id &&
+          (account.provider === "password" || account.provider === "magic_link") && account.providerAccountId === input.email)))) {
+      throw createIdentityConflictError("providerAccount");
+    }
+    let reassignedMemberships: OrganisationMember<string>[] = [];
+    const revokedSessions: Session[] = [];
+    if (!keep && source) {
+      this.users.set(source.id, { ...source, email: null, emailVerifiedAt: null, updatedAt: input.verifiedAt });
+      for (const account of this.accounts.values()) {
+        if (account.userId !== source.id) continue;
+        if ((account.provider === "password" || account.provider === "magic_link") &&
+          account.providerAccountId === input.email) this.deleteStoredAccount(account.id);
+        else if (account.id === input.verifiedAccountId) {
+          this.accounts.set(account.id, { ...account, userId: owner.id, updatedAt: input.verifiedAt });
+        }
+      }
+      reassignedMemberships = this.scimStorage.reassignEmailOwner(source.id, owner.id, input.email, input.verifiedAt);
+      for (const session of this.sessions.values()) {
+        if (session.userId !== source.id || session.revokedAt) continue;
+        const revoked = { ...session, revokedAt: input.verifiedAt, revokeReason: "email_ownership_changed" };
+        this.sessions.set(session.id, revoked);
+        revokedSessions.push(clone(revoked));
+      }
+    }
+    this.users.set(owner.id, clone(owner));
+    if (!keep) this.accounts.set(input.replacementAccount.id, clone(input.replacementAccount));
+    if (token) this.tokens.set(token.id, { ...token, usedAt: input.verifiedAt });
+    return { user: clone(owner), created: !keep, verified: !source?.emailVerifiedAt, revokedSessions, reassignedMemberships };
+  }
   protected readonly users = new Map<string, User>();
   protected readonly sessions = new Map<string, Session>();
   private readonly tokens = new Map<string, AuthToken>();

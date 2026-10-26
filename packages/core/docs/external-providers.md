@@ -133,6 +133,8 @@ const auth = createOwnAuth({
 
 Unverified emails are never used for account linking. A provider identity already linked to another user returns `oauth_account_conflict`.
 
+A trusted verified provider email can claim a matching pending email only through the email ownership rules. Without proof of access to the original pending account, earlier credentials stay on the original user and the verified provider identity belongs to a separate verified user. Already verified accounts keep the existing linking behavior. See [Email ownership](/docs/security-model#email-ownership).
+
 Unlink a provider only after another usable authentication method exists:
 
 ```ts

@@ -196,7 +196,8 @@ export class OwnAuthClient {
     input: OwnAuthEndpointInputMap["verifyEmail"]
   ): Promise<PublicAuthUser> {
     const result = await this.request("verifyEmail", input);
-    this.updateUser(result.user);
+    if (this.snapshot.data && this.snapshot.data.user.id !== result.user.id) this.clearSession();
+    else this.updateUser(result.user);
     return result.user;
   }
 

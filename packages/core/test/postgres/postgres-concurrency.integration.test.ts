@@ -39,8 +39,10 @@ describeWithDatabase("Postgres concurrency integration", () => {
 
   describeAtomicAdapterConformance("Postgres", async () => {
     const [first, second] = await database.connectPair();
+    const storage = [new PostgresAuthStorage(first), new PostgresAuthStorage(second)] as const;
     return {
-      storage: [new PostgresAuthStorage(first), new PostgresAuthStorage(second)],
+      storage,
+      scim: [storage[0].scimStorage, storage[1].scimStorage],
       rateLimits: [
         new PostgresRateLimitStore(database.queryable),
         new PostgresRateLimitStore(database.queryable)

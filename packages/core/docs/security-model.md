@@ -8,6 +8,16 @@ Own Auth never stores, logs, or returns plain-text passwords. The raw password e
 
 Every password has a unique random salt, and its stored hash includes the algorithm and work factor. Current Argon2id and PBKDF2 hashes remain verifiable without being repeatedly rewritten. Applications may supply a `PasswordHasher` when hashing is delegated to a dedicated service or runtime capability.
 
+## Email ownership
+
+Password signup creates a pending account and a session. Proving mailbox ownership later must also prove access to that pending account before its credentials and data can be retained. The core `verifyMagicLink`, `verifyEmail`, and `resetPassword` methods accept an optional `sessionToken` for this purpose. The HTTP handler supplies it from the authenticated cookie or bearer credential.
+
+Without valid original account proof, claiming a pending email that has prior credentials or access creates a separate verified user. Earlier passwords, passkeys, MFA, provider links, API keys, grants, organisation ownership, and application data remain attached to the original user ID. The email is removed from that user and its existing sessions are revoked. A password reset installs the chosen new password only on the verified owner. Already verified accounts retain their identity.
+
+A pending account that has never acquired credentials or access can be verified in place. Trusted provider email claims follow the same ownership rule. Only the provider identity proved by the current response can move to the verified owner. Exact matching SCIM resources and their provisioned memberships follow the mailbox owner. Other memberships and data remain with their existing owner.
+
+Custom storage adapters must implement `claimEmailOwnershipAtomically`. Proof consumption, the ownership decision, account separation, session revocation, and any SCIM reassignment must succeed or roll back together. Built in adapters use the existing schema. Apply all existing migrations before upgrading.
+
 ## Tokens
 
 All tokens, including magic links, password resets, email verification, phone codes, and invites, follow the same security model:

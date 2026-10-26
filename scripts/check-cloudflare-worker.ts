@@ -157,6 +157,10 @@ try {
 
 function createRemoteAtomicHarness(origin: string): AtomicAdapterHarness {
   return {
+    scim: [
+      createRemoteProxy<ScimStorage>(origin, "scim-storage"),
+      createRemoteProxy<ScimStorage>(origin, "scim-storage")
+    ],
     storage: [
       createRemoteProxy<AuthStorage>(origin, "storage"),
       createRemoteProxy<AuthStorage>(origin, "storage")

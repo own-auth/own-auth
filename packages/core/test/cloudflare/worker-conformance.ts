@@ -47,6 +47,7 @@ const authMethods = new Set<string>([
 ]);
 
 const storageMethods = new Set([
+  "claimEmailOwnershipAtomically",
   "acceptInvitationAtomically",
   "activateTotpFactor",
   "consumeMfaChallenge",

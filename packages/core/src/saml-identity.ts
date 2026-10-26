@@ -19,8 +19,8 @@ import {
   findPairedSamlUser,
   verifyPairedSamlEmail
 } from "./scim-saml.js";
-import type { ScimUser } from "./scim-types.js";
 import { recordCommittedAuthEvents } from "./webhook-outbox.js";
+import { claimEmailOwnership } from "./auth-engine-email-ownership.js";
 
 export interface ResolvedSamlIdentity {
   user: User;
@@ -42,38 +42,30 @@ export async function resolveSamlIdentity(
   request?: RequestContext
 ): Promise<ResolvedSamlIdentity> {
   const identity = mapIdentity(ctx, connection, assertion);
-  const pairedScimUser = identity.email
-    ? await findPairedSamlUser(ctx, connection.id, identity.email)
-    : null;
   const existingAccount = await ctx.storage.getAccountByProvider(
     identity.provider,
     identity.providerAccountId
   );
   if (existingAccount) {
-    if (pairedScimUser && pairedScimUser.userId !== existingAccount.userId) {
-      throw identityConflict();
-    }
-    const resolved = await resolveExistingAccount(
-      ctx, connection, existingAccount, transaction, request
+    return resolveExistingAccount(
+      ctx, connection, existingAccount, transaction, identity.email, request
     );
-    return {
-      ...resolved,
-      user: await verifyPairedIdentityEmail(
-        ctx, connection, pairedScimUser, resolved.user, identity.email, request
-      )
-    };
   }
+  const pairedScimUser = identity.email
+    ? await findPairedSamlUser(ctx, connection.id, identity.email)
+    : null;
   if (transaction.intent === "link") {
     if (!transaction.userId) throw invalidTransaction();
     if (pairedScimUser && pairedScimUser.userId !== transaction.userId) {
       throw identityConflict();
     }
     const user = await requireIdentityUser(ctx, transaction.userId);
-    await linkIdentity(ctx, connection, identity, user, request);
+    const account = await linkIdentity(ctx, connection, identity, user, request);
     return {
-      user: await verifyPairedIdentityEmail(
-        ctx, connection, pairedScimUser, user, identity.email, request
-      ),
+      user: await verifyPairedSamlEmail(ctx, {
+        samlConnectionId: connection.id, resource: pairedScimUser, user, normalizedEmail: identity.email,
+        verifiedAccountId: account.id, request, originalActorUserId: transaction.userId
+      }),
       linked: true
     };
   }
@@ -81,42 +73,44 @@ export async function resolveSamlIdentity(
 
   if (pairedScimUser) {
     const user = await requireIdentityUser(ctx, pairedScimUser.userId);
-    await linkIdentity(ctx, connection, identity, user, request);
+    const account = await linkIdentity(ctx, connection, identity, user, request);
     return {
-      user: await verifyPairedIdentityEmail(
-        ctx, connection, pairedScimUser, user, identity.email, request
-      ),
+      user: await verifyPairedSamlEmail(ctx, {
+        samlConnectionId: connection.id, resource: pairedScimUser, user, normalizedEmail: identity.email,
+        verifiedAccountId: account.id, request
+      }),
       linked: true
     };
   }
 
   const existingUser = await ctx.storage.getUserByEmail(identity.email);
   if (existingUser) {
-    assertUserEnabled(existingUser);
-    if (connection.accountLinking !== "verified_email") {
-      throw new AuthError(
-        "account_linking_required",
-        "Sign in to the existing account before linking this SAML identity",
-        409
-      );
-    }
-    await linkIdentity(ctx, connection, identity, existingUser, request);
-    return { user: existingUser, linked: true };
+    return linkIdentityByEmail(ctx, connection, identity, existingUser, identity.email, request);
   }
   return provisionIdentity(ctx, connection, identity, request);
 }
 
-function verifyPairedIdentityEmail(
+async function linkIdentityByEmail(
   ctx: AuthEngineContext,
   connection: SamlConnection,
-  pairedScimUser: ScimUser | null,
+  identity: MappedSamlIdentity,
   user: User,
-  email: string | null,
+  email: string,
   request?: RequestContext
-): Promise<User> {
-  return pairedScimUser && email
-    ? verifyPairedSamlEmail(ctx, connection.id, pairedScimUser, user, email, request)
-    : Promise.resolve(user);
+): Promise<ResolvedSamlIdentity> {
+  if (user.emailVerifiedAt) assertUserEnabled(user);
+  if (connection.accountLinking !== "verified_email") {
+    throw new AuthError(
+      "account_linking_required",
+      "Sign in to the existing account before linking this SAML identity",
+      409
+    );
+  }
+  const owner = await claimEmailOwnership(ctx, {
+    user, email, proof: { kind: "provider" }, request
+  });
+  await linkIdentity(ctx, connection, identity, owner, request);
+  return { user: owner, linked: true };
 }
 
 async function resolveExistingAccount(
@@ -124,14 +118,31 @@ async function resolveExistingAccount(
   connection: SamlConnection,
   account: Account,
   transaction: { intent: SamlIntent; userId: string | null },
+  email: string | null,
   request?: RequestContext
 ): Promise<ResolvedSamlIdentity> {
   if (transaction.intent === "link" && account.userId !== transaction.userId) {
     throw identityConflict();
   }
-  const user = await requireIdentityUser(ctx, account.userId);
+  let user = await ctx.storage.getUserById(account.userId);
+  if (!user) throw new AuthError("invalid_credentials", "Invalid SAML identity", 401);
+  if (email && email === user.email) {
+    user = await claimEmailOwnership(ctx, {
+      user, email, verifiedAccountId: account.id, request,
+      proof: { kind: "provider", originalActorUserId: transaction.intent === "link" ? transaction.userId ?? undefined : undefined }
+    });
+  }
+  assertUserEnabled(user);
+  const paired = email ? await findPairedSamlUser(ctx, connection.id, email) : null;
+  if (paired && paired.userId !== user.id) throw identityConflict();
   await ensureMembership(ctx, connection, user, request);
-  return { user, linked: transaction.intent === "link" };
+  return {
+    user: await verifyPairedSamlEmail(ctx, {
+      samlConnectionId: connection.id, resource: paired, user, normalizedEmail: email,
+      verifiedAccountId: account.id, request
+    }),
+    linked: transaction.intent === "link"
+  };
 }
 
 async function linkIdentity(
@@ -140,11 +151,11 @@ async function linkIdentity(
   identity: MappedSamlIdentity,
   user: User,
   request?: RequestContext
-): Promise<void> {
+): Promise<Account> {
   const sameProvider = (await ctx.storage.listAccountsByUserId(user.id))
     .find((account) => account.provider === identity.provider);
   if (sameProvider) {
-    if (sameProvider.providerAccountId === identity.providerAccountId) return;
+    if (sameProvider.providerAccountId === identity.providerAccountId) return sameProvider;
     throw new AuthError(
       "saml_identity_conflict",
       "A different SAML identity is already linked for this connection",
@@ -182,12 +193,13 @@ async function linkIdentity(
       auditEvents
     });
     await recordCommittedAuthEvents(ctx, auditEvents);
+    return account;
   } catch (error) {
     const winner = await ctx.storage.getAccountByProvider(
       identity.provider,
       identity.providerAccountId
     );
-    if (winner?.userId === user.id) return;
+    if (winner?.userId === user.id) return winner;
     if (winner) throw identityConflict();
     const currentMembership = await ctx.storage.getOrganisationMember(
       connection.organisationId,
@@ -197,7 +209,7 @@ async function linkIdentity(
       const committedEvents = auditEvents.slice(0, 1);
       await storage.commitIdentity({ account, auditEvents: committedEvents });
       await recordCommittedAuthEvents(ctx, committedEvents);
-      return;
+      return account;
     }
     throw error;
   }
@@ -269,20 +281,13 @@ async function provisionIdentity(
         connection,
         winnerAccount,
         { intent: "sign_in", userId: null },
+        email,
         request
       );
     }
     const winnerUser = await ctx.storage.getUserByEmail(email);
-    if (winnerUser && connection.accountLinking === "verified_email") {
-      await linkIdentity(ctx, connection, identity, winnerUser, request);
-      return { user: winnerUser, linked: true };
-    }
     if (winnerUser) {
-      throw new AuthError(
-        "account_linking_required",
-        "Sign in to the existing account before linking this SAML identity",
-        409
-      );
+      return linkIdentityByEmail(ctx, connection, identity, winnerUser, email, request);
     }
     throw error;
   }

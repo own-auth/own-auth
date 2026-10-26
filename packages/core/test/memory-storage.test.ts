@@ -15,6 +15,7 @@ describeAtomicAdapterConformance("Memory", async () => {
   const rateLimits = new InMemoryRateLimitStore();
   return {
     storage: [storage, storage],
+    scim: [storage.scimStorage, storage.scimStorage],
     rateLimits: [rateLimits, rateLimits],
     close() {}
   };

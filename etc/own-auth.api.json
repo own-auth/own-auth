@@ -335,6 +335,8 @@
     "AtomicAuthEventWrite",
     "AtomicAuthenticationMethodRemovalInput",
     "AtomicAuthenticationMethodRemovalResult",
+    "AtomicEmailOwnershipInput",
+    "AtomicEmailOwnershipResult",
     "AtomicInvitationAcceptanceInput",
     "AtomicInvitationAcceptanceResult",
     "AtomicInvitationRevocationInput",

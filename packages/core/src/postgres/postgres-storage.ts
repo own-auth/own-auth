@@ -1,5 +1,7 @@
 import type {
   AtomicAuthenticationMethodRemovalInput,
+  AtomicEmailOwnershipInput,
+  AtomicEmailOwnershipResult,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -76,8 +78,12 @@ import { PostgresWebhookStorage } from "./postgres-webhook-storage.js";
 import { PostgresSamlStorage } from "./postgres-saml-storage.js";
 import { PostgresScimStorage } from "./postgres-scim-storage.js";
 import { PostgresCloudStorage } from "./postgres-cloud-storage.js";
+import { claimPostgresEmailOwnership } from "./postgres-email-ownership.js";
 
 export class PostgresAuthStorage extends PostgresIdentityStorage implements AuthStorage {
+  claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
+    return withPostgresIdentityErrors(() => claimPostgresEmailOwnership(this.db, input));
+  }
   readonly authorizationServerStorage = new PostgresAuthorizationServerStorage(this.db);
   readonly webhookStorage = new PostgresWebhookStorage(this.db);
   readonly samlStorage = new PostgresSamlStorage(this.db);

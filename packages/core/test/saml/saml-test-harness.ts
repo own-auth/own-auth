@@ -5,9 +5,9 @@ import {
   type OwnAuth,
   type PublicSamlConnection,
   type SamlCompletionResult,
-  type SamlProvider,
-  type SamlVerifiedAssertion
+  type SamlProvider
 } from "../../src/index.js";
+import type { SamlVerifiedAssertion } from "../../src/saml.js";
 import { completeSamlResponse } from "../../src/saml-internals.js";
 import { SamlProtocolError } from "../../src/saml.js";
 

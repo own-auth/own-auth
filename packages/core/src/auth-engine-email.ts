@@ -12,9 +12,7 @@ import {
 } from "./auth-engine-types.js";
 import {
   assertRedirectAllowed,
-  assertUserEnabled,
   audit,
-  consumeToken,
   getUsableToken,
   hashPasswordInput,
   type AuthEngineContext
@@ -22,7 +20,7 @@ import {
 import { completeFirstFactor } from "./auth-engine-mfa.js";
 import { requestEmailToken } from "./auth-engine-email-token.js";
 import { revokeAllSessionsForUser } from "./auth-engine-sessions.js";
-import { createUser } from "./auth-engine-users.js";
+import { claimEmailOwnership } from "./auth-engine-email-ownership.js";
 
 export async function requestMagicLink(
   ctx: AuthEngineContext,
@@ -49,42 +47,24 @@ export async function verifyMagicLink(
   ctx: AuthEngineContext,
   input: VerifyTokenInput
 ): Promise<SignInResult> {
-  const token = await consumeToken(ctx, input.token, "magic_link");
-  let user = token.userId ? await ctx.storage.getUserById(token.userId) : null;
-  let created = false;
+  const token = await getUsableToken(ctx, input.token, "magic_link");
+  let candidate = token.userId ? await ctx.storage.getUserById(token.userId) : null;
 
-  if (!user && token.email) {
-    user = await ctx.storage.getUserByEmail(token.email);
+  if (!candidate && !token.userId && token.email) {
+    candidate = await ctx.storage.getUserByEmail(token.email);
   }
 
-  if (!user && token.email && ctx.allowMagicLinkSignup) {
-    user = await createUser(ctx, { email: token.email });
-    created = true;
-  }
-
-  if (!user) {
+  if (!token.email || (!candidate && (token.userId || !ctx.allowMagicLinkSignup))) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
-  requireMatchingTokenEmail(user, token.email);
-
-  assertUserEnabled(user);
-
-  if (!user.emailVerifiedAt && token.email) {
-    user = requireTokenUser(await ctx.storage.updateUser(user.id, {
-      emailVerifiedAt: new Date(),
-      updatedAt: new Date()
-    }));
-  }
-
-  if (created) {
-    await audit(ctx, {
-      eventType: "user.signed_up",
-      actorUserId: user.id,
-      targetUserId: user.id,
-      context: input.request,
-      metadata: { provider: "magic_link" }
-    });
-  }
+  if (candidate) requireMatchingTokenEmail(candidate, token.email);
+  const user = await claimEmailOwnership(ctx, {
+    user: candidate,
+    email: token.email,
+    proof: { kind: "token", tokenHash: token.tokenHash, type: "magic_link" },
+    sessionToken: input.sessionToken,
+    request: input.request
+  });
 
   await audit(ctx, {
     eventType: "magic_link.used",
@@ -116,27 +96,21 @@ export async function verifyEmail(
   ctx: AuthEngineContext,
   input: VerifyTokenInput
 ): Promise<User> {
-  const token = await consumeToken(ctx, input.token, "email_verification");
+  const token = await getUsableToken(ctx, input.token, "email_verification");
   const user = token.userId ? await ctx.storage.getUserById(token.userId) : null;
 
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
-  requireMatchingTokenEmail(user, token.email);
+  const email = requireMatchingTokenEmail(user, token.email);
 
-  const updatedUser = requireTokenUser(await ctx.storage.updateUser(user.id, {
-    emailVerifiedAt: new Date(),
-    updatedAt: new Date()
-  }));
-
-  await audit(ctx, {
-    eventType: "email.verified",
-    actorUserId: user.id,
-    targetUserId: user.id,
-    context: input.request
+  return claimEmailOwnership(ctx, {
+    user,
+    email,
+    proof: { kind: "token", tokenHash: token.tokenHash, type: "email_verification" },
+    sessionToken: input.sessionToken,
+    request: input.request
   });
-
-  return updatedUser;
 }
 
 export async function requestPasswordReset(
@@ -168,27 +142,30 @@ export async function resetPassword(
   if (!user) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
-  requireMatchingTokenEmail(user, candidate.email);
+  const email = requireMatchingTokenEmail(user, candidate.email);
 
   const passwordHash = await hashPasswordInput(ctx, input.newPassword);
-  await consumeToken(ctx, input.token, "password_reset");
-  const updatedUser = requireTokenUser(await ctx.storage.updateUser(user.id, {
+  const updatedUser = await claimEmailOwnership(ctx, {
+    user,
+    email,
+    proof: { kind: "token", tokenHash: candidate.tokenHash, type: "password_reset" },
     passwordHash,
-    updatedAt: new Date()
-  }));
-  await revokeAllSessionsForUser(ctx, user.id, "password_reset");
+    sessionToken: input.sessionToken,
+    request: input.request
+  });
+  await revokeAllSessionsForUser(ctx, updatedUser.id, "password_reset");
 
   await audit(ctx, {
     eventType: "password.changed",
-    actorUserId: user.id,
-    targetUserId: user.id,
+    actorUserId: updatedUser.id,
+    targetUserId: updatedUser.id,
     context: input.request
   });
 
   return updatedUser;
 }
 
-function requireMatchingTokenEmail(user: User, tokenEmail: string | null): void {
+function requireMatchingTokenEmail(user: User, tokenEmail: string | null): string {
   if (
     !tokenEmail ||
     !user.email ||
@@ -196,11 +173,5 @@ function requireMatchingTokenEmail(user: User, tokenEmail: string | null): void 
   ) {
     throw new AuthError("invalid_token", "Invalid token", 401);
   }
-}
-
-function requireTokenUser(user: User | null): User {
-  if (!user) {
-    throw new AuthError("invalid_token", "Invalid token", 401);
-  }
-  return user;
+  return tokenEmail;
 }

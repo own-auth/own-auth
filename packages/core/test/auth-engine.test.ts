@@ -299,7 +299,8 @@ describe("OwnAuth core", () => {
     const resetMessage = emailProvider.messages.at(-1);
     await auth.resetPassword({
       token: resetMessage?.token ?? "",
-      newPassword: "new-password"
+      newPassword: "new-password",
+      sessionToken: signup.sessionToken
     });
 
     await expect(auth.getCurrentSession(signup.sessionToken)).resolves.toBeNull();

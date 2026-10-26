@@ -1,6 +1,8 @@
 import type { RateLimitStore } from "../../src/rate-limit.js";
 import type { AuthStorage } from "../../src/storage.js";
+import type { ScimStorage } from "../../src/scim-storage.js";
 import type { AtomicAuthEventWrite } from "../../src/auth-storage-atomic.js";
+import { emailOwnershipAdapterCases } from "./email-ownership-cases.js";
 import { totpRateLimitAdapterCases } from "./totp-rate-limit-cases.js";
 import {
   assertConformanceArrayEqual,
@@ -14,6 +16,7 @@ import {
 
 export interface AtomicAdapterHarness {
   storage: readonly [AuthStorage, AuthStorage];
+  scim: readonly [ScimStorage, ScimStorage];
   rateLimits: readonly [RateLimitStore, RateLimitStore];
   close(): Promise<void> | void;
 }
@@ -24,6 +27,7 @@ export interface AtomicAdapterCase {
 }
 
 export const atomicAdapterCases: readonly AtomicAdapterCase[] = [
+  ...emailOwnershipAdapterCases,
   ...totpRateLimitAdapterCases,
   {
     name: "allows only one connection to consume a token",

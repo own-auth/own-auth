@@ -6,9 +6,13 @@
 
 - TOTP enrollment, login, disabling TOTP, and recovery code regeneration now share one per user verification budget through the configured rate limit store. The default allows five checks per five minutes. Changing sessions or challenges cannot reset the budget, and storage failures reject verification.
 
+- Mailbox ownership claims no longer retain credentials installed on an unverified account unless the caller also proves access to that original account. Magic links, verification, password recovery, and trusted provider email claims use one atomic ownership operation across memory, Postgres, and D1.
+
 - OAuth sign in and linking now require proof from the browser that started the transaction. The HTTP handler manages a temporary cookie for each attempt, including popup and Apple form callbacks.
 
 ### Breaking changes
+
+- Custom storage adapters must implement `claimEmailOwnershipAtomically`. Custom email verification, magic link, and reset integrations should pass the original `sessionToken` from trusted request credentials to retain a pending account. Otherwise a pending email with earlier access belongs to a separate verified user ID. Existing migrations remain sufficient.
 
 - Custom OAuth integrations must keep the `browserBindingToken` returned by `createOAuthAuthorizationUrl` in the initiating browser's protected cookie or server session and supply it to `completeOAuthSignIn`. Restart OAuth attempts begun before this update. No database migration is required.
 

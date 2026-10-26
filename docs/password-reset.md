@@ -27,6 +27,8 @@ Own Auth validates the token, hashes the new password, atomically consumes the t
 
 ### Why all sessions are revoked
 
+For a pending email, pass the original account's `sessionToken` from trusted request credentials to retain that account. The HTTP handler supplies it automatically. Without original account proof, a pending email with prior credentials or access is assigned a separate verified user ID with only the new password. Earlier credentials and data stay with the original account, which loses the email and its sessions. Already verified accounts retain their ID. See [Email ownership](/docs/security-model#email-ownership).
+
 If the password was compromised, an active session could belong to an attacker. Revoking every session forces everyone, including a potential attacker, to authenticate again.
 
 ### Errors

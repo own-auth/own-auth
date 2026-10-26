@@ -1,5 +1,7 @@
 import type {
   AtomicAuthenticationMethodRemovalInput,
+  AtomicEmailOwnershipInput,
+  AtomicEmailOwnershipResult,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -76,8 +78,16 @@ import { D1WebhookStorage } from "./d1-webhook-storage.js";
 import { D1SamlStorage } from "./d1-saml-storage.js";
 import { D1ScimStorage } from "./d1-scim-storage.js";
 import { D1CloudStorage } from "./d1-cloud-storage.js";
+import { claimD1EmailOwnership } from "./d1-email-ownership.js";
 
 export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
+  async claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
+    try {
+      return await claimD1EmailOwnership(this.db, input);
+    } catch (error) {
+      rethrowD1IdentityError(error);
+    }
+  }
   readonly authorizationServerStorage = new D1AuthorizationServerStorage(this.db);
   readonly webhookStorage = new D1WebhookStorage(this.db);
   readonly samlStorage = new D1SamlStorage(this.db);

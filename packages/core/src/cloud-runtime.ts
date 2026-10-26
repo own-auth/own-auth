@@ -33,7 +33,7 @@ import type { OwnAuth } from "./auth-engine.js";
 import { CloudDeliveryFailure, CloudHttpError } from "./cloud-errors.js";
 import { CloudCommandHandler } from "./cloud-commands.js";
 import { CloudSecurity } from "./cloud-security.js";
-import type { AuditEvent, RequestContext, Session } from "./types.js";
+import type { AuditEvent, OrganisationMember, RequestContext, Session } from "./types.js";
 import {
   cloudEmailType,
   cloudPositiveInteger,
@@ -46,6 +46,7 @@ const cloudBatchSize = 50;
 const cloudRequestTimeoutMs = 15_000;
 const cloudIngestionWindowMs = 7 * 24 * 60 * 60_000;
 const authMethodAuditEvents = new Set([
+  "email.removed",
   "external_provider.linked",
   "external_provider.unlinked",
   "mfa.totp_enabled",
@@ -417,6 +418,21 @@ export class CloudRuntime {
     await this.enqueue(sessionRevokedCloudEvent(session, context)).catch((error) => {
       this.warn(`Cloud session revocation event could not be recorded: ${safeCloudError(error)}`);
     });
+  }
+
+  async recordEmailMembershipReassigned(
+    originalUserId: string,
+    member: OrganisationMember<string>,
+    context?: RequestContext
+  ): Promise<void> {
+    try {
+      await this.enqueue(cloudOrganisationMemberRemovedEvent(member.organisationId, originalUserId, context));
+      if (member.status === "active") {
+        await this.enqueue(cloudOrganisationMemberAddedEvent(member, context ?? {}));
+      }
+    } catch (error) {
+      this.warn(`Cloud email ownership membership could not be recorded: ${safeCloudError(error)}`);
+    }
   }
 
   private async enqueue(

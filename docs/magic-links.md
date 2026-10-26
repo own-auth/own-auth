@@ -143,6 +143,8 @@ const auth = createOwnAuth({
 
 Keep the lifetime short because a magic link grants access to the account. The default is 15 minutes.
 
+When verifying a pending email, pass the original account's session token as `sessionToken` from trusted request credentials if that account should be retained. The HTTP handler supplies it automatically. Without this proof, a pending account with earlier credentials or access is separated from the verified mailbox owner. The returned session belongs to the verified owner and inherits no earlier credentials or application data. See [Email ownership](/docs/security-model#email-ownership).
+
 ## Next step
 
 Add phone-based login with [Phone login](/docs/phone-login), or learn about [Email verification](/docs/email-verification) for confirming user emails after sign-up.

@@ -276,12 +276,15 @@ export interface RequestEmailVerificationInput {
 
 export interface VerifyTokenInput {
   token: string;
+  /** Optional authenticated session of the account that originally supplied the email. */
+  sessionToken?: string;
   request?: RequestContext;
 }
 
 export interface ResetPasswordInput {
   token: string;
   newPassword: string;
+  sessionToken?: string;
   request?: RequestContext;
 }
 

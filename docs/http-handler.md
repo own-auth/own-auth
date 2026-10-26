@@ -119,6 +119,8 @@ Do not copy an arbitrary `X-Forwarded-For` value directly. Resolve the address t
 
 Completed signup, signin, magic-link verification, phone login, OAuth, One Tap, SAML, and passkey authentication set an `HttpOnly` session cookie. The JSON response never contains the raw session token, password hash, or session-token hash.
 
+Magic link verification, email verification, and password reset use the existing session cookie or bearer credential to prove access to a pending account. A JSON body cannot supply this proof. If mailbox verification instead creates a separate verified owner, the old account's sessions are revoked. Email verification clears an obsolete cookie and does not create a session. Use the returned user ID. See [Email ownership](/docs/security-model#email-ownership).
+
 The default cookie is:
 
 ```text

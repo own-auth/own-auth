@@ -21,6 +21,7 @@ import type {
 import {
   cloneStored,
   findStored,
+  someStored,
   updateStoredEntity,
   updateStoredWhere
 } from "./memory-storage-helpers.js";
@@ -31,6 +32,10 @@ export class MemoryAuthorizationServerStorage
   extends MemoryProtectedResourceStorage
   implements AuthorizationServerStorage, DpopStorage {
   readonly dpopStorage = this;
+  hasUserAuthorization(userId: string): boolean {
+    return [this.interactions, this.grants, this.subjects]
+      .some((records) => someStored<{ userId: string | null }>(records, (record) => record.userId === userId));
+  }
   private readonly clients = new Map<string, AuthorizationClient>();
   private readonly secrets = new Map<string, AuthorizationClientSecret>();
   private readonly interactions = new Map<string, AuthorizationInteraction>();

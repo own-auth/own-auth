@@ -94,23 +94,25 @@ const endpointExecutors = {
     body: serializeDelivery(await auth.requestMagicLink({ ...input, request }))
   }),
 
-  verifyMagicLink: async ({ auth, request }, input) =>
-    signInExecution(await auth.verifyMagicLink({ ...input, request })),
+  verifyMagicLink: async ({ auth, sessionToken, request }, input) =>
+    signInExecution(await auth.verifyMagicLink({ ...input, sessionToken: sessionToken ?? undefined, request })),
 
   requestEmailVerification: async ({ auth, request }, input) => ({
     body: serializeDelivery(await auth.requestEmailVerification({ ...input, request }))
   }),
 
-  verifyEmail: async ({ auth, request }, input) => ({
-    body: { user: serializeUser(await auth.verifyEmail({ ...input, request })) }
-  }),
+  verifyEmail: async ({ auth, sessionToken, request }, input) => {
+    const user = await auth.verifyEmail({ ...input, sessionToken: sessionToken ?? undefined, request });
+    const current = sessionToken ? await auth.getCurrentSession(sessionToken) : null;
+    return { body: { user: serializeUser(user) }, clearSession: !!sessionToken && current?.user.id !== user.id };
+  },
 
   requestPasswordReset: async ({ auth, request }, input) => ({
     body: serializeDelivery(await auth.requestPasswordReset({ ...input, request }))
   }),
 
-  resetPassword: async ({ auth, request }, input) => ({
-    body: { user: serializeUser(await auth.resetPassword({ ...input, request })) },
+  resetPassword: async ({ auth, sessionToken, request }, input) => ({
+    body: { user: serializeUser(await auth.resetPassword({ ...input, sessionToken: sessionToken ?? undefined, request })) },
     clearSession: true,
     clearMfaChallenge: true
   }),
@@ -145,7 +147,7 @@ const endpointExecutors = {
   oauthStart: async ({ auth, sessionToken, request }, input) => {
     const actorUserId = input.intent === "link"
       ? (await auth.requireCurrentSession(requireToken(sessionToken, "session"))).user.id
-      : undefined;
+      : sessionToken ? (await auth.getCurrentSession(sessionToken))?.user.id : undefined;
     const result = await auth.createOAuthAuthorizationUrl({ ...input, actorUserId, request });
     return {
       body: { url: result.url, expiresAt: result.expiresAt.toISOString() },
