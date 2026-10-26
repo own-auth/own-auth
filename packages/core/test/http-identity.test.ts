@@ -3,6 +3,7 @@ import {
   InMemoryAuthStorage,
   createOwnAuth,
   createOwnAuthHandler,
+  createOAuthBrowserCookie,
   defineOwnAuthPlugin,
   type OAuthProviderAdapter
 } from "../src/index.js";
@@ -108,7 +109,17 @@ describe("identity HTTP contract", () => {
     const state = new URL(authorization.url).searchParams.get("state") ?? "";
     const handler = createOwnAuthHandler(auth);
     const response = await handler(new Request(
-      `https://api.example.com/api/auth/oauth/google/callback?state=${encodeURIComponent(state)}&code=provider-code`
+      `https://api.example.com/api/auth/oauth/google/callback?state=${encodeURIComponent(state)}&code=provider-code`,
+      {
+        headers: {
+          cookie: createOAuthBrowserCookie(
+            authorization.state,
+            authorization.browserBindingToken,
+            authorization.expiresAt,
+            new URL("https://api.example.com")
+          ).split(";", 1)[0]!
+        }
+      }
     ));
     const html = await response.text();
 
@@ -131,6 +142,7 @@ describe("identity HTTP contract", () => {
 
     await expect(auth.completeOAuthSignIn({
       provider: "google",
+      browserBindingToken: "",
       callbackParameters: new URLSearchParams({ code: "secret-provider-code" })
     })).rejects.toMatchObject({ code: "oauth_transaction_invalid" });
 

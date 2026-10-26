@@ -15,6 +15,39 @@ export interface OwnAuthMfaCookieOptions extends OwnAuthSessionCookieOptions {}
 
 export const defaultSessionCookieName = "own_auth_session";
 export const defaultMfaCookieName = "own_auth_mfa";
+const oauthStatePattern = /^[a-f0-9]{64}$/;
+
+export function createOAuthBrowserCookie(
+  state: string,
+  browserBindingToken: string,
+  expiresAt: Date,
+  requestUrl: URL
+): string {
+  return serializeCookie(browserBindingToken, expiresAt, requestUrl, oauthCookieOptions(state, requestUrl));
+}
+
+export function clearOAuthBrowserCookie(state: string, requestUrl: URL): string {
+  return serializeCookie("", new Date(0), requestUrl, oauthCookieOptions(state, requestUrl), 0);
+}
+
+export function readOAuthBrowserToken(request: Request, state: string): string | null {
+  if (!oauthStatePattern.test(state)) return null;
+  return readCookie(request, oauthCookieOptions(state, new URL(request.url)).name);
+}
+
+function oauthCookieOptions(state: string, requestUrl: URL): OwnAuthSessionCookieOptions & { name: string } {
+  if (!oauthStatePattern.test(state)) {
+    throw invalidCookieConfiguration("Invalid OAuth state");
+  }
+  const secure = resolveSecureCookie(requestUrl);
+  return {
+    name: `${secure ? "__Host-" : ""}own_auth_oauth_${state}`,
+    path: "/",
+    secure,
+    // Apple returns through a POST from the provider's origin.
+    sameSite: secure ? "none" : "lax"
+  };
+}
 
 export function readSessionToken(
   request: Request,

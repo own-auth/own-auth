@@ -11,10 +11,13 @@ import {
 } from "./contract.js";
 import {
   clearMfaChallengeCookie,
+  clearOAuthBrowserCookie,
   clearSessionCookie,
   createMfaChallengeCookie,
+  createOAuthBrowserCookie,
   createSessionCookie,
   readMfaChallengeToken,
+  readOAuthBrowserToken,
   readSessionToken,
   type OwnAuthMfaCookieOptions,
   type OwnAuthSessionCookieOptions
@@ -93,6 +96,7 @@ export function createOwnAuthHandler(
       },
       async () => {
         const sessionCredential = readSessionToken(request, options.cookie);
+        let oauthState: string | null = null;
         try {
           if (endpoint.csrf !== "oauth_state" && endpoint.csrf !== "saml_state") {
             assertCsrfSafe(
@@ -108,6 +112,9 @@ export function createOwnAuthHandler(
               ? Math.min(maxRequestBodyBytes, 64 * 1024)
               : maxRequestBodyBytes
           );
+          if (endpoint.responseKind === "oauth_callback" && typeof input?.state === "string") {
+            oauthState = input.state;
+          }
           const providedContext = options.getRequestContext
             ? await options.getRequestContext(request)
             : defaultRequestContext(request);
@@ -118,12 +125,14 @@ export function createOwnAuthHandler(
             input,
             sessionCredential.token,
             readMfaChallengeToken(request, options.mfaCookie),
-            context
+            context,
+            oauthState ? readOAuthBrowserToken(request, oauthState) : null
           );
           const headers = responseHeaders();
           applyCookies(headers, execution, requestUrl, options);
 
           if (endpoint.responseKind === "oauth_callback") {
+            if (oauthState) headers.append("set-cookie", clearOAuthBrowserCookie(oauthState, requestUrl));
             return createOAuthCallbackResponse(execution, requestUrl, headers);
           }
           if (endpoint.responseKind === "saml_callback") {
@@ -135,7 +144,7 @@ export function createOwnAuthHandler(
           }
           return new Response(JSON.stringify(execution.body), { status: 200, headers });
         } catch (error) {
-          return handleRequestError(
+          const response = await handleRequestError(
             error,
             request,
             requestUrl,
@@ -143,6 +152,10 @@ export function createOwnAuthHandler(
             endpoint.responseKind === "oauth_callback",
             endpoint.responseKind === "saml_callback"
           );
+          if (oauthState && error instanceof OAuthCallbackError) {
+            response.headers.append("set-cookie", clearOAuthBrowserCookie(oauthState, requestUrl));
+          }
+          return response;
         }
       }
     );
@@ -290,6 +303,14 @@ function applyCookies(
   requestUrl: URL,
   options: OwnAuthHandlerOptions
 ): void {
+  if (execution.setOAuthBrowser) {
+    headers.append("set-cookie", createOAuthBrowserCookie(
+      execution.setOAuthBrowser.state,
+      execution.setOAuthBrowser.token,
+      execution.setOAuthBrowser.expiresAt,
+      requestUrl
+    ));
+  }
   if (execution.setSession) {
     headers.append("set-cookie", createSessionCookie(
       execution.setSession.token,

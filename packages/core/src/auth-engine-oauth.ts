@@ -1,7 +1,11 @@
 import { createId, randomBase64Url } from "./crypto.js";
 import { requireEncryptionKeyRing } from "./encryption.js";
 import { AuthError, isAuthError } from "./errors.js";
-import { deriveOAuthSecrets } from "./oauth-derivation.js";
+import {
+  createOAuthBrowserBinding,
+  deriveOAuthSecrets,
+  matchesOAuthBrowserBinding
+} from "./oauth-derivation.js";
 import { requireOAuthProvider } from "./oauth-registry.js";
 import { OAuthCallbackError } from "./oauth-types.js";
 import { normalizeTrustedWebOrigin } from "./url-security.js";
@@ -45,7 +49,7 @@ export async function createOAuthAuthorizationUrl(
     throw new AuthError("validation_error", "actorUserId is required to link a provider", 400);
   }
 
-  const state = randomBase64Url(32);
+  const { state, browserBindingToken } = createOAuthBrowserBinding();
   const { codeVerifier, nonce } = await deriveOAuthSecrets(state);
   const codeChallenge = await import("oauth4webapi").then((oauth) =>
     oauth.calculatePKCECodeChallenge(codeVerifier)
@@ -76,7 +80,7 @@ export async function createOAuthAuthorizationUrl(
     context: input.request,
     metadata: { provider: input.provider, intent, mode }
   });
-  return { url: url.toString(), expiresAt };
+  return { url: url.toString(), expiresAt, state, browserBindingToken };
 }
 
 export async function completeOAuthSignIn(
@@ -86,7 +90,7 @@ export async function completeOAuthSignIn(
   const provider = requireOAuthProvider(ctx.oauthProviders, input.provider);
   await rateLimitByIp(ctx, "oauth-callback", input.request?.ipAddress, 30, 10 * minute);
   const state = input.callbackParameters.get("state");
-  if (!state) {
+  if (!state || !matchesOAuthBrowserBinding(state, input.browserBindingToken)) {
     await auditOAuthFailure(ctx, input.provider, "oauth_transaction_invalid", input.request);
     throw new AuthError("oauth_transaction_invalid", "OAuth transaction is invalid", 400);
   }

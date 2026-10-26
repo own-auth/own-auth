@@ -102,6 +102,7 @@
     "OwnAuthScim",
     "administrationActions",
     "clearMfaChallengeCookie",
+    "clearOAuthBrowserCookie",
     "clearSessionCookie",
     "cloud",
     "coreAuditEventTypes",
@@ -109,6 +110,7 @@
     "createConfiguredOwnAuthOpenApiDocument",
     "createEncryptionKeyRing",
     "createMfaChallengeCookie",
+    "createOAuthBrowserCookie",
     "createOwnAuth",
     "createOwnAuthAuthorizationServerHandler",
     "createOwnAuthAuthorizationServerOpenApiDocument",
@@ -137,6 +139,7 @@
     "ownAuthEndpointContract",
     "permissionsForRole",
     "readMfaChallengeToken",
+    "readOAuthBrowserToken",
     "readSessionToken",
     "roleHasPermission",
     "toAuthError"

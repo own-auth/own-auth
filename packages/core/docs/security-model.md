@@ -62,6 +62,8 @@ Configure only destinations controlled by the application. See [Magic Links](/do
 
 OAuth redirect transactions store only a peppered state hash, provider, intent, validated destination, interaction mode, opener origin, expiry, and consumption time. State is atomically consumed before the authorization code is exchanged.
 
+Each redirect transaction requires a separate secret from the browser that started it. State is a purpose separated SHA256 commitment to that secret, so browser proof is checked before the existing atomic transaction consumption. The HTTP handler keeps the secret in a temporary cookie and never returns it in JSON or popup messages. A valid provider callback presented by another browser cannot complete sign in or linking. Separate cookies preserve concurrent attempts. The existing transaction still owns expiry and replay protection, and no additional database record is needed.
+
 PKCE verifier and OIDC nonce values are derived independently from the raw state and are never stored. Google and Apple responses verify signature, issuer, audience, expiry, nonce, subject, and verified-email claims. GitHub identities use the authenticated API response and only verified email addresses.
 
 Explicit provider linking is the default. A matching verified email does not silently link to an existing user unless `oauth.accountLinking` is set to `verified_email`. Unverified emails are never used for account linking.

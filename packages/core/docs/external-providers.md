@@ -50,15 +50,32 @@ await authClient.signInWithOAuth({
 With the server API:
 
 ```ts
-const { url } = await auth.createOAuthAuthorizationUrl({
+import { createOAuthBrowserCookie } from "own-auth/http";
+
+const authorization = await auth.createOAuthAuthorizationUrl({
   provider: "google",
   destination: "https://app.example.com/account",
 });
 
-return Response.redirect(url);
+const headers = new Headers({ location: authorization.url });
+headers.append("set-cookie", createOAuthBrowserCookie(
+  authorization.state,
+  authorization.browserBindingToken,
+  authorization.expiresAt,
+  new URL(request.url),
+));
+return new Response(null, { status: 302, headers });
 ```
 
-The HTTP handler completes callbacks, creates the secure session cookie, and returns to the validated destination.
+The start request and provider callback must use the same auth host so the browser can return its temporary cookie. The HTTP handler completes callbacks, creates the secure session cookie, and returns to the validated destination. The browser client and `POST /oauth/start` manage the temporary cookie automatically.
+
+`createOAuthAuthorizationUrl` returns `state` and a secret `browserBindingToken` in addition to the URL and expiry. The state is derived from that secret, and only the peppered state hash is stored in the existing transaction. Keep the secret out of URLs, response JSON, browser JavaScript, logs, and provider parameters.
+
+For a custom callback, read the proof with `readOAuthBrowserToken(request, state)` from `own-auth/http` and pass it as `browserBindingToken` to `completeOAuthSignIn`. Read `state` from the validated provider callback parameters. Never accept the proof from callback parameters or a request body. Clear the cookie with `clearOAuthBrowserCookie(state, new URL(request.url))` after completion or a consumed provider failure. Applications using their own server session can store each proof there instead, provided it belongs to the initiating browser.
+
+Callbacks without matching browser proof are rejected before state is consumed or the provider is contacted. Cookies are separate for each transaction so concurrent tabs do not replace each other's proof. Over HTTPS they use `HttpOnly`, `Secure`, `SameSite=None`, `Path=/`, and the `__Host-` name prefix without a Domain attribute. `SameSite=None` allows Apple's callback POST from the provider origin. HTTP localhost uses a development cookie with `SameSite=Lax`; use HTTPS for Apple form callbacks.
+
+After upgrading, restart OAuth attempts that were already in progress. Earlier attempts have no browser proof and are rejected. No database migration is required.
 
 ## Popup OAuth
 

@@ -156,9 +156,11 @@ The default challenge cookie is `own_auth_mfa`. It is cleared after successful M
 
 Google and GitHub use GET callbacks. Apple supports GET and its required `application/x-www-form-urlencoded` POST callback. Apple form bodies are always limited to 64 KiB, even when `maxRequestBodyBytes` is larger.
 
+`POST /oauth/start` sets a separate temporary browser proof cookie for each transaction. Callbacks require the matching cookie before consuming state or exchanging the provider code. The cookie is cleared after completion, including provider failures. The proof never appears in the start JSON or popup messages. HTTPS cookies use `HttpOnly`, `Secure`, `SameSite=None`, `Path=/`, and a `__Host-` name prefix without a Domain attribute, so Apple form callbacks can return the proof. HTTP localhost uses `SameSite=Lax` for development; Apple form callbacks require HTTPS. Start and callback requests must use the same auth host.
+
 Redirect callbacks set the session or MFA cookie and return to the transaction's validated destination. Popup callbacks post only `complete`, `mfa_required`, `linked`, or `failure` to the exact stored opener origin. They never post OAuth codes, provider tokens, session tokens, or MFA challenge tokens.
 
-Provider and account-resolution failures are returned through the popup message or redirect query parameters. Direct callback HTTP errors are reserved for malformed or rate-limited requests.
+Provider and account resolution failures are returned through the popup message or redirect query parameters. Missing or mismatched browser proof returns `oauth_transaction_invalid` directly, without setting a session or exposing transaction details. Malformed, expired, reused, and rate limited callbacks also return direct HTTP errors.
 
 ## SAML callbacks
 

@@ -30,6 +30,7 @@ import {
 
 export interface EndpointExecution<Body = unknown> {
   body: Body;
+  setOAuthBrowser?: { state: string; token: string; expiresAt: Date };
   setSession?: { token: string; expiresAt: Date };
   setMfaChallenge?: { token: string; expiresAt: Date };
   clearSession?: boolean;
@@ -46,6 +47,7 @@ interface EndpointExecutionContext {
   auth: OwnAuth<string, string>;
   sessionToken: string | null;
   mfaChallengeToken: string | null;
+  oauthBrowserToken: string | null;
   request: RequestContext;
 }
 
@@ -145,20 +147,27 @@ const endpointExecutors = {
       ? (await auth.requireCurrentSession(requireToken(sessionToken, "session"))).user.id
       : undefined;
     const result = await auth.createOAuthAuthorizationUrl({ ...input, actorUserId, request });
-    return { body: { url: result.url, expiresAt: result.expiresAt.toISOString() } };
+    return {
+      body: { url: result.url, expiresAt: result.expiresAt.toISOString() },
+      setOAuthBrowser: {
+        state: result.state,
+        token: result.browserBindingToken,
+        expiresAt: result.expiresAt
+      }
+    };
   },
 
-  oauthGoogleCallback: async ({ auth, request }, input) =>
-    oauthExecution(await completeOAuth(auth, "google", input, request)),
+  oauthGoogleCallback: async (context, input) =>
+    oauthExecution(await completeOAuth(context, "google", input)),
 
-  oauthGitHubCallback: async ({ auth, request }, input) =>
-    oauthExecution(await completeOAuth(auth, "github", input, request)),
+  oauthGitHubCallback: async (context, input) =>
+    oauthExecution(await completeOAuth(context, "github", input)),
 
-  oauthAppleCallback: async ({ auth, request }, input) =>
-    oauthExecution(await completeOAuth(auth, "apple", input, request)),
+  oauthAppleCallback: async (context, input) =>
+    oauthExecution(await completeOAuth(context, "apple", input)),
 
-  oauthAppleCallbackPost: async ({ auth, request }, input) =>
-    oauthExecution(await completeOAuth(auth, "apple", input, request)),
+  oauthAppleCallbackPost: async (context, input) =>
+    oauthExecution(await completeOAuth(context, "apple", input)),
 
   prepareGoogleOneTap: async ({ auth, request }) => {
     const result = await auth.prepareGoogleOneTap({ request });
@@ -386,11 +395,12 @@ export function executeEndpoint<Id extends OwnAuthEndpointId>(
   rawInput: Record<string, unknown> | undefined,
   sessionToken: string | null,
   mfaChallengeToken: string | null,
-  request: RequestContext
+  request: RequestContext,
+  oauthBrowserToken: string | null
 ): Promise<EndpointExecution<OwnAuthEndpointOutputMap[Id]>> {
   const executor = endpointExecutors[endpointId] as unknown as EndpointExecutor<Id>;
   return executor(
-    { auth, sessionToken, mfaChallengeToken, request },
+    { auth, sessionToken, mfaChallengeToken, request, oauthBrowserToken },
     rawInput as unknown as OwnAuthEndpointInputMap[Id]
   );
 }
@@ -441,16 +451,20 @@ function samlExecution(
 }
 
 async function completeOAuth(
-  auth: OwnAuth<string, string>,
+  context: EndpointExecutionContext,
   provider: "google" | "github" | "apple",
-  rawInput: Record<string, unknown> | undefined,
-  request: RequestContext
+  rawInput: Record<string, unknown> | undefined
 ): Promise<OAuthCompletionResult> {
   const parameters = new URLSearchParams();
   for (const [name, value] of Object.entries(rawInput ?? {})) {
     if (typeof value === "string") parameters.append(name, value);
   }
-  return auth.completeOAuthSignIn({ provider, callbackParameters: parameters, request });
+  return context.auth.completeOAuthSignIn({
+    provider,
+    callbackParameters: parameters,
+    browserBindingToken: context.oauthBrowserToken ?? "",
+    request: context.request
+  });
 }
 
 function serializeMfaRequired(result: MfaRequiredResult): SignInPayload {

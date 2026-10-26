@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Security
+
+- OAuth sign in and linking now require proof from the browser that started the transaction. The HTTP handler manages a temporary cookie for each attempt, including popup and Apple form callbacks.
+
+### Breaking changes
+
+- Custom OAuth integrations must keep the `browserBindingToken` returned by `createOAuthAuthorizationUrl` in the initiating browser's protected cookie or server session and supply it to `completeOAuthSignIn`. Restart OAuth attempts begun before this update. No database migration is required.
+
 ## 0.3.12
 
 ### Added

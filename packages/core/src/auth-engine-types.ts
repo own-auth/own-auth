@@ -122,11 +122,16 @@ export interface CreateOAuthAuthorizationUrlInput {
 export interface OAuthAuthorizationResult {
   url: string;
   expiresAt: Date;
+  state: string;
+  /** Store only in the initiating browser's protected cookie or server session. */
+  browserBindingToken: string;
 }
 
 export interface CompleteOAuthSignInInput {
   provider: ExternalAccountProvider;
   callbackParameters: URLSearchParams;
+  /** Read from the initiating browser, never from provider callback parameters. */
+  browserBindingToken: string;
   request?: RequestContext;
 }
 

@@ -217,6 +217,7 @@ describe("identity expansion", () => {
     const state = new URL(authorization.url).searchParams.get("state") ?? "";
     expectMfa(await auth.completeOAuthSignIn({
       provider: "google",
+      browserBindingToken: authorization.browserBindingToken,
       callbackParameters: new URLSearchParams({ state, code: "provider-code" })
     }));
 
@@ -356,6 +357,7 @@ describe("identity expansion", () => {
     const state = new URL(authorization.url).searchParams.get("state") ?? "";
     const signedIn = await auth.completeOAuthSignIn({
       provider: "google",
+      browserBindingToken: authorization.browserBindingToken,
       callbackParameters: new URLSearchParams({ state, code: "provider-code" })
     });
     if (signedIn.status !== "complete") throw new Error("Expected completed OAuth sign-in");

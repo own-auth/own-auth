@@ -1,7 +1,22 @@
 import { encodeBase64Url } from "./encoding.js";
+import { hashSecret, randomBase64Url, safeEqual } from "./crypto.js";
 
 const pkceLabel = "own-auth:oauth:pkce:v1";
 const nonceLabel = "own-auth:oauth:nonce:v1";
+const browserBindingLabel = "own-auth:oauth:browser:v1:";
+
+export function createOAuthBrowserBinding(): { state: string; browserBindingToken: string } {
+  const browserBindingToken = randomBase64Url(32);
+  return {
+    state: hashSecret(browserBindingLabel + browserBindingToken),
+    browserBindingToken
+  };
+}
+
+export function matchesOAuthBrowserBinding(state: string, token: unknown): boolean {
+  return typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token) &&
+    safeEqual(state, hashSecret(browserBindingLabel + token));
+}
 
 /**
  * OAuth PKCE and nonce values are deterministic HMAC derivations of the raw

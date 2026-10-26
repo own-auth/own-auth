@@ -250,7 +250,7 @@ export async function runPersistenceConformance(
     oauthStates: [oauthState],
     mfaChallengeTokens: [mfa.challengeToken],
     webAuthnChallenges: [webAuthnChallenge],
-    otherSecrets: [totpCode],
+    otherSecrets: [totpCode, oauth.browserBindingToken],
     organisationId: organisation.id,
     ownerUserId: signup.user.id,
     continuity: {

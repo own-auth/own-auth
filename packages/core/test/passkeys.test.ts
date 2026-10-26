@@ -184,6 +184,7 @@ describe("passkeys", () => {
     const authorization = await auth.createOAuthAuthorizationUrl({ provider: "google" });
     await completePasskeyChallenge(auth, await auth.completeOAuthSignIn({
       provider: "google",
+      browserBindingToken: authorization.browserBindingToken,
       callbackParameters: new URLSearchParams({
         state: new URL(authorization.url).searchParams.get("state") ?? "",
         code: "provider-code"
