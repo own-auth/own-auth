@@ -4,6 +4,8 @@
 
 ### Security
 
+- Updated the SAML XML parser resolution from `@xmldom/xmldom@0.8.13` to `0.8.15` across the SAML, XML signature, and XML encryption dependency paths. Applications must also update affected resolutions in their own lockfiles.
+
 - TOTP enrollment, login, disabling TOTP, and recovery code regeneration now share one per user verification budget through the configured rate limit store. The default allows five checks per five minutes. Changing sessions or challenges cannot reset the budget, and storage failures reject verification.
 
 - Mailbox ownership claims no longer retain credentials installed on an unverified account unless the caller also proves access to that original account. Magic links, verification, password recovery, and trusted provider email claims use one atomic ownership operation across memory, Postgres, and D1.

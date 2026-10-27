@@ -34,6 +34,8 @@ const handler = createOwnAuthHandler(auth, { basePath: "/auth" });
 
 `createSaml` is exported separately so applications that do not use SAML never load the XML and SAML protocol dependency.
 
+Keep the application lockfile's XML parser resolution patched. This repository resolves `@xmldom/xmldom@0.8.15` for `@node-saml/node-saml`, `xml-crypto`, and `xml-encryption`. The [parser maintainer's release notes](https://github.com/xmldom/xmldom/releases/tag/0.8.15) describe fixes for excessive parsing time and memory use. Applications upgrading Own Auth must also update their own affected transitive resolutions and audit their production dependencies. An older application lockfile can keep an affected parser even when its parent library accepts the patched version.
+
 The built-in Postgres, Cloudflare D1, and in-memory adapters implement SAML persistence. A custom adapter must implement the exported `SamlCapableStorage` contract. Own Auth fails when SAML is configured with storage that does not provide that capability.
 
 ## Create A Connection

@@ -80,6 +80,17 @@ describe("SAML protocol qualification", () => {
     await expect(verify(duplicated)).rejects.toThrow("duplicate ID");
   });
 
+  it("rejects a signed assertion whose XML end tag contains trailing content", async () => {
+    const signed = signAssertion(responseXml());
+    const malformed = signed.replace("</saml:NameID>", "</saml:NameID\n trailing>");
+    await expect(verify(malformed)).rejects.toThrow("not valid XML");
+  });
+
+  it("rejects duplicate XML attributes before signature verification", async () => {
+    const malformed = responseXml().replace('Version="2.0"', 'Version="2.0" Version="2.0"');
+    await expect(verify(malformed)).rejects.toThrow("not valid XML");
+  });
+
   it("ignores embedded key information and enforces the configured IdP key", async () => {
     const signedByAttacker = signAssertion(responseXml(), attackerKeys);
 
@@ -118,7 +129,7 @@ describe("SAML protocol qualification", () => {
     const weak = signAssertion(responseXml(), trustedKeys, "sha1");
 
     await expect(verify(weak)).rejects.toEqual(
-      expect.objectContaining<SamlProtocolError>({
+      expect.objectContaining<Pick<SamlProtocolError, "code">>({
         code: "saml_signature_algorithm_unsupported"
       })
     );
