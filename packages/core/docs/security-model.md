@@ -30,6 +30,8 @@ All tokens, including magic links, password resets, email verification, phone co
 
 The raw token is sent to the user in an email link or SMS and is never persisted by Own Auth.
 
+Password reset links also record the user's current password reset version at issuance. Both authenticated password changes and resets advance that version atomically with the password write. Reset verification checks the version inside the same operation, so an older or already running reset cannot replace a newer password. Password hash format upgrades preserve the version and reject writes based on a stale stored hash. Migration `019_password_reset_version` invalidates outstanding legacy reset links; request fresh links after upgrading.
+
 ## Sessions
 
 - **High-entropy tokens.** Session tokens are generated with a cryptographically secure random number generator, producing 256 bits of entropy.

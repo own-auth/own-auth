@@ -8,6 +8,14 @@ import type {
   User
 } from "./types.js";
 
+export interface AtomicPasswordUpdateInput {
+  userId: string;
+  expectedPasswordHash: string | null;
+  passwordHash: string;
+  updatedAt: Date;
+  purpose: "replacement" | "rehash";
+}
+
 export interface AtomicEmailOwnershipInput {
   operationId: string;
   sourceUserId: string | null;

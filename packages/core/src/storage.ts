@@ -24,6 +24,7 @@ import type {
   AtomicAuthenticationMethodRemovalInput,
   AtomicEmailOwnershipInput,
   AtomicEmailOwnershipResult,
+  AtomicPasswordUpdateInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -51,6 +52,8 @@ export interface ListUsersFilter {
 }
 
 export interface AuthStorage {
+  /** Rejects a stale password and invalidates reset authority on replacement. */
+  updatePasswordAtomically(input: AtomicPasswordUpdateInput): Promise<User | null>;
   /** Atomically establishes email ownership without inheriting an unproved identity. */
   claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null>;
   createUser(user: User): Promise<User>;

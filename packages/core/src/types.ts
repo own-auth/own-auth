@@ -197,6 +197,8 @@ export interface Session {
 }
 
 export interface AuthToken {
+  /** Captured by storage when a password reset token is issued. */
+  passwordResetVersion?: number;
   id: string;
   tokenHash: string;
   type: TokenType;

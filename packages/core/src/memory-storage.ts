@@ -3,6 +3,7 @@ import type {
   AtomicAuthenticationMethodRemovalInput,
   AtomicEmailOwnershipInput,
   AtomicEmailOwnershipResult,
+  AtomicPasswordUpdateInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -50,6 +51,19 @@ function isUsableSmsOtp(otp: SmsOtp, at: Date): boolean {
 }
 
 export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthStorage {
+  private readonly passwordResetVersions = new Map<string, number>();
+
+  async updatePasswordAtomically(input: AtomicPasswordUpdateInput): Promise<User | null> {
+    const user = this.users.get(input.userId);
+    if (!user || user.passwordHash !== input.expectedPasswordHash || user.disabledAt) return null;
+    const updated = { ...user, passwordHash: input.passwordHash, updatedAt: input.updatedAt };
+    this.users.set(user.id, updated);
+    if (input.purpose === "replacement") {
+      this.passwordResetVersions.set(user.id, (this.passwordResetVersions.get(user.id) ?? 1) + 1);
+    }
+    return clone(updated);
+  }
+
   async claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
     const source = input.sourceUserId ? this.users.get(input.sourceUserId) : undefined;
     const proof = input.proof;
@@ -60,6 +74,7 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
           !candidate.usedAt && candidate.expiresAt > input.verifiedAt)
       : undefined;
     if (input.proof.kind === "token" && !token) return null;
+    if (token && !this.isCurrentResetToken(token)) return null;
     if (input.sourceUserId && (!source || source.email !== input.email ||
       (source.emailVerifiedAt && source.disabledAt &&
         !(input.proof.kind === "token" && input.proof.type === "password_reset")))) return null;
@@ -111,6 +126,9 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
       }
     }
     this.users.set(owner.id, clone(owner));
+    if (input.passwordHash !== undefined && source) {
+      this.passwordResetVersions.set(source.id, (this.passwordResetVersions.get(source.id) ?? 1) + 1);
+    }
     if (!keep) this.accounts.set(input.replacementAccount.id, clone(input.replacementAccount));
     if (token) this.tokens.set(token.id, { ...token, usedAt: input.verifiedAt });
     return { user: clone(owner), created: !keep, verified: !source?.emailVerifiedAt, revokedSessions, reassignedMemberships };
@@ -238,14 +256,18 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
   }
 
   async createToken(token: AuthToken): Promise<AuthToken> {
-    this.tokens.set(token.id, clone(token));
-    return clone(token);
+    const stored = token.type === "password_reset"
+      ? { ...token, passwordResetVersion: this.passwordResetVersions.get(token.userId ?? "") ?? 1 }
+      : token;
+    this.tokens.set(token.id, clone(stored));
+    return clone(stored);
   }
 
   async getTokenByHash(tokenHash: string, type?: TokenType): Promise<AuthToken | null> {
     return findStored(
       this.tokens,
-      (token) => token.tokenHash === tokenHash && (!type || token.type === type)
+      (token) => token.tokenHash === tokenHash && (!type || token.type === type) &&
+        (token.usedAt !== null || this.isCurrentResetToken(token))
     );
   }
 
@@ -259,6 +281,7 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
         token.tokenHash !== tokenHash ||
         token.type !== type ||
         token.usedAt ||
+        !this.isCurrentResetToken(token) ||
         token.expiresAt.getTime() <= consumedAt.getTime()
       ) {
         continue;
@@ -272,6 +295,11 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
 
   async updateToken(id: string, patch: Partial<AuthToken>): Promise<AuthToken | null> {
     return updateStoredEntity(this.tokens, id, patch);
+  }
+
+  private isCurrentResetToken(token: AuthToken): boolean {
+    return token.type !== "password_reset" || Boolean(token.userId && this.users.has(token.userId) &&
+      (token.passwordResetVersion ?? 0) === (this.passwordResetVersions.get(token.userId) ?? 1));
   }
 
   async createSmsOtp(otp: SmsOtp): Promise<SmsOtp> {

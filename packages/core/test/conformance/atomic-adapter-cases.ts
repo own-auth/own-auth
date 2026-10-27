@@ -4,6 +4,7 @@ import type { ScimStorage } from "../../src/scim-storage.js";
 import type { AtomicAuthEventWrite } from "../../src/auth-storage-atomic.js";
 import { emailOwnershipAdapterCases } from "./email-ownership-cases.js";
 import { totpRateLimitAdapterCases } from "./totp-rate-limit-cases.js";
+import { passwordResetAdapterCases } from "./password-reset-cases.js";
 import {
   assertConformanceArrayEqual,
   assertConformanceEqual,
@@ -29,6 +30,7 @@ export interface AtomicAdapterCase {
 export const atomicAdapterCases: readonly AtomicAdapterCase[] = [
   ...emailOwnershipAdapterCases,
   ...totpRateLimitAdapterCases,
+  ...passwordResetAdapterCases,
   {
     name: "allows only one connection to consume a token",
     async run({ storage }) {

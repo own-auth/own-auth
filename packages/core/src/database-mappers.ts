@@ -80,6 +80,7 @@ export function mapSession(row: Row): Session {
 
 export function mapToken(row: Row): AuthToken {
   return {
+    ...(row.type === "password_reset" ? { passwordResetVersion: numberValue(row.password_reset_version ?? 0) } : {}),
     id: stringValue(row.id),
     tokenHash: stringValue(row.token_hash),
     type: stringValue(row.type) as TokenType,

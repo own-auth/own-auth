@@ -16,7 +16,8 @@ export const coreMigrationFiles = [
   "015_scim.sql",
   "016_device_authorization.sql",
   "017_atomic_auth_operations.sql",
-  "018_cloud.sql"
+  "018_cloud.sql",
+  "019_password_reset_version.sql"
 ] as const;
 
 export const initialMigration = coreMigrationFiles[0];

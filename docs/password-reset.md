@@ -25,6 +25,18 @@ await auth.resetPassword({
 
 Own Auth validates the token, hashes the new password, atomically consumes the token, updates the user, and revokes every existing session for the account. A validation or hashing failure leaves the token unused so the reset can be retried. The user must sign in again with the new password.
 
+Every successful password replacement invalidates all earlier reset links, including a link whose verification started before the replacement completed. This applies to password resets and authenticated password changes. Request a fresh link after changing the password. A failed password write leaves existing reset authority unchanged. Upgrading the format of a password hash during sign in preserves reset links.
+
+## Upgrade and storage requirements
+
+Apply core migration `019_password_reset_version` before using this update with Postgres or D1. It invalidates outstanding reset links issued before the upgrade. Users can request a fresh link through the existing reset request action. Existing records cannot establish whether those links survived an earlier password change, so they cannot safely remain valid.
+
+The migration adds an internal password reset version to each user and token. Issuing a reset token captures the current version in the same storage statement. Password replacement advances the user's version in the same atomic operation that writes the password. Verifying a reset checks its recorded version against the current user inside the ownership operation. Older records remain stored without being marked as used. Neither timestamps nor password hash differences decide whether a link remains valid.
+
+Custom adapters must implement `updatePasswordAtomically`, capture `AuthToken.passwordResetVersion` during issuance, and reject unused reset authority from earlier versions during lookup, consumption, and atomic ownership claims. Authenticated replacements and hash upgrades must compare the current stored hash with `expectedPasswordHash` before writing. The `replacement` purpose advances the version even when the resulting hash is identical. The `rehash` purpose preserves the version because it upgrades the format of the same password. Use this operation for password updates instead of a generic user patch.
+
+Keep the version columns and checks when rolling back unrelated changes. Older application code that ignores these versions can accept invalidated links again.
+
 ### Why all sessions are revoked
 
 For a pending email, pass the original account's `sessionToken` from trusted request credentials to retain that account. The HTTP handler supplies it automatically. Without original account proof, a pending email with prior credentials or access is assigned a separate verified user ID with only the new password. Earlier credentials and data stay with the original account, which loses the email and its sessions. Already verified accounts retain their ID. See [Email ownership](/docs/security-model#email-ownership).
@@ -37,7 +49,7 @@ If the password was compromised, an active session could belong to an attacker. 
 |---|---|
 | `expired_token` | The link has expired. The default lifetime is one hour. |
 | `token_already_used` | The link has already been used. |
-| `invalid_token` | The token is malformed, missing, or does not match a password-reset token. |
+| `invalid_token` | The token is malformed, missing, or invalidated by a password replacement or the upgrade. |
 | `weak_password` | The new password is shorter than the configured minimum length. |
 
 ## Full example

@@ -41,6 +41,7 @@ import { invokeConformanceRpc, readConformanceRpc } from "./worker-rpc.js";
 
 const authMethods = new Set<string>([
   ...persistenceConformanceAuthMethods,
+  "changePassword",
   "completeMfaWithTotp",
   "disableTotp",
   "regenerateRecoveryCodes"
@@ -48,6 +49,7 @@ const authMethods = new Set<string>([
 
 const storageMethods = new Set([
   "claimEmailOwnershipAtomically",
+  "updatePasswordAtomically",
   "acceptInvitationAtomically",
   "activateTotpFactor",
   "consumeMfaChallenge",

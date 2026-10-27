@@ -1,4 +1,5 @@
 import type { AuthToken, SmsOtp, TokenType } from "../types.js";
+import { currentPasswordResetTokenSql } from "../password-reset-sql.js";
 import { mapSmsOtp, mapToken } from "../database-mappers.js";
 import { smsOtpReturning, tokenReturning } from "../database-schema.js";
 import type { PostgresQueryable, Row } from "./postgres-types.js";
@@ -16,6 +17,7 @@ export async function atomicConsumeToken(
        and type = $2
        and used_at is null
        and expires_at > $3
+       and ${currentPasswordResetTokenSql("own_auth_tokens")}
      returning ${tokenReturning}`,
     [tokenHash, type, consumedAt]
   );

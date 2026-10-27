@@ -125,7 +125,10 @@ export async function signInEmailPassword(
 
   let authenticatedUser = user;
   if (ctx.passwordHasher.needsRehash(user.passwordHash)) {
-    const rehashedUser = await ctx.storage.updateUser(user.id, {
+    const rehashedUser = await ctx.storage.updatePasswordAtomically({
+      userId: user.id,
+      expectedPasswordHash: user.passwordHash,
+      purpose: "rehash",
       passwordHash: await ctx.passwordHasher.hash(input.password),
       updatedAt: new Date()
     });
@@ -154,12 +157,15 @@ export async function changePassword(
     throw new AuthError("invalid_credentials", "Invalid current password", 401);
   }
 
-  const updatedUser = await ctx.storage.updateUser(user.id, {
+  const updatedUser = await ctx.storage.updatePasswordAtomically({
+    userId: user.id,
+    expectedPasswordHash: user.passwordHash,
+    purpose: "replacement",
     passwordHash: await hashPasswordInput(ctx, input.newPassword),
     updatedAt: new Date()
   });
   if (!updatedUser) {
-    throw new AuthError("invalid_session", "Invalid or expired session", 401);
+    throw new AuthError("invalid_credentials", "The password changed. Sign in again before retrying.", 401);
   }
 
   await revokeOtherSessions(

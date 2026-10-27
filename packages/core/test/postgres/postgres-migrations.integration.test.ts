@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PostgresAuthStorage } from "../../src/postgres/index.js";
 import {
   coreMigrationVersions
 } from "../../src/core-migrations.js";
@@ -10,6 +11,32 @@ import {
 const describeWithDatabase = hasPostgresTestDatabase ? describe : describe.skip;
 
 describeWithDatabase("core Postgres migrations", () => {
+  it("invalidates legacy reset links while newly issued links capture the current password version", async () => {
+    const now = new Date();
+    const database = await createPostgresTestDatabase({
+      async afterMigration(file, client) {
+        if (file !== "018_cloud.sql") return;
+        await client.query(`insert into own_auth_users (id, email, password_hash, created_at, updated_at)
+          values ('legacy-reset-user', 'legacy-reset@example.com', 'original-hash', $1, $1)`, [now]);
+        await client.query(`insert into own_auth_tokens
+          (id, token_hash, type, user_id, email, expires_at, created_at)
+          values ('legacy-reset-token', 'legacy-reset-proof', 'password_reset', 'legacy-reset-user',
+            'legacy-reset@example.com', $1, $2)`, [new Date(now.getTime() + 60_000), now]);
+      }
+    });
+    try {
+      const storage = new PostgresAuthStorage(database.client);
+      expect(await storage.getTokenByHash("legacy-reset-proof", "password_reset")).toBeNull();
+      const issued = await storage.createToken({ id: "fresh-reset-token", tokenHash: "fresh-reset-proof",
+        type: "password_reset", userId: "legacy-reset-user", email: "legacy-reset@example.com",
+        phone: null, organisationId: null, expiresAt: new Date(now.getTime() + 60_000), usedAt: null, createdAt: now });
+      expect(issued.passwordResetVersion).toBe(1);
+      expect(await storage.getTokenByHash("fresh-reset-proof", "password_reset")).not.toBeNull();
+      const retained = await database.client.query("select used_at from own_auth_tokens where id = 'legacy-reset-token'");
+      expect(retained.rows[0]?.used_at).toBeNull();
+    } finally { await database.close(); }
+  });
+
   it("applies every core migration to a fresh database", async () => {
     const database = await createPostgresTestDatabase();
 

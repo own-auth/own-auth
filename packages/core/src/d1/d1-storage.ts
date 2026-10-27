@@ -2,12 +2,14 @@ import type {
   AtomicAuthenticationMethodRemovalInput,
   AtomicEmailOwnershipInput,
   AtomicEmailOwnershipResult,
+  AtomicPasswordUpdateInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
   AtomicInvitationRevocationInput
 } from "../auth-storage-atomic.js";
 import type { AuditEventFilter, AuthStorage, ListUsersFilter } from "../storage.js";
+import { currentPasswordResetTokenSql, insertAuthTokenSql, updatePasswordSql } from "../password-reset-sql.js";
 import {
   buildAuditEventListQuery,
   buildUserListQuery
@@ -224,19 +226,26 @@ export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
   }
 
   async createToken(token: AuthToken): Promise<AuthToken> {
-    return mapToken(await this.insertOne("own_auth_tokens", tokenColumns, token, tokenReturning));
+    const values: unknown[] = [];
+    const sql = insertAuthTokenSql(token, (value) => { values.push(value); return `?${values.length}`; });
+    const row = await this.prepare(sql, values).first<DatabaseRow>();
+    if (!row) throw new Error("D1 token creation returned no row");
+    return mapToken(row);
+  }
+
+  async updatePasswordAtomically(input: AtomicPasswordUpdateInput): Promise<User | null> {
+    const values: unknown[] = [];
+    const sql = updatePasswordSql(input, (value) => { values.push(value); return `?${values.length}`; });
+    const row = await this.prepare(sql, values).first<DatabaseRow>();
+    return row ? mapUser(row) : null;
   }
 
   async getTokenByHash(tokenHash: string, type?: TokenType): Promise<AuthToken | null> {
-    const row = type
-      ? await this.selectOne(
-          `${tokenReturning} from own_auth_tokens where token_hash = ?1 and type = ?2`,
-          [tokenHash, type]
-        )
-      : await this.selectOne(
-          `${tokenReturning} from own_auth_tokens where token_hash = ?1`,
-          [tokenHash]
-        );
+    const row = await this.selectOne(
+      `${tokenReturning} from own_auth_tokens where token_hash = ?1 ${type ? "and type = ?2" : ""}
+        and ${currentPasswordResetTokenSql("own_auth_tokens")}`,
+      type ? [tokenHash, type] : [tokenHash]
+    );
     return row ? mapToken(row) : null;
   }
 

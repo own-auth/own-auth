@@ -340,6 +340,7 @@
     "AtomicInvitationAcceptanceInput",
     "AtomicInvitationAcceptanceResult",
     "AtomicInvitationRevocationInput",
+    "AtomicPasswordUpdateInput",
     "AtomicWebhookDeliverySeed",
     "AuditEvent",
     "AuditEventFilter",

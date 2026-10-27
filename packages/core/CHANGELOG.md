@@ -6,6 +6,8 @@
 
 - Updated the SAML XML parser resolution from `@xmldom/xmldom@0.8.13` to `0.8.15` across the SAML, XML signature, and XML encryption dependency paths. Applications must also update affected resolutions in their own lockfiles.
 
+- Successful password resets and authenticated password changes now invalidate every earlier reset link, including resets already in progress. Password hash upgrades cannot overwrite a password replaced by another request.
+
 - TOTP enrollment, login, disabling TOTP, and recovery code regeneration now share one per user verification budget through the configured rate limit store. The default allows five checks per five minutes. Changing sessions or challenges cannot reset the budget, and storage failures reject verification.
 
 - Mailbox ownership claims no longer retain credentials installed on an unverified account unless the caller also proves access to that original account. Magic links, verification, password recovery, and trusted provider email claims use one atomic ownership operation across memory, Postgres, and D1.
@@ -13,6 +15,8 @@
 - OAuth sign in and linking now require proof from the browser that started the transaction. The HTTP handler manages a temporary cookie for each attempt, including popup and Apple form callbacks.
 
 ### Breaking changes
+
+- Apply core migration `019_password_reset_version` before using this update with Postgres or D1. Existing reset links must be requested again after upgrading. Custom adapters must implement `updatePasswordAtomically` and preserve the password reset version during issuance and verification. See the password reset guide.
 
 - Custom storage adapters must implement `claimEmailOwnershipAtomically`. Custom email verification, magic link, and reset integrations should pass the original `sessionToken` from trusted request credentials to retain a pending account. Otherwise a pending email with earlier access belongs to a separate verified user ID. Existing migrations remain sufficient.
 

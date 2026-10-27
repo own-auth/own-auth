@@ -23,7 +23,7 @@ export async function claimPostgresEmailOwnership(
   let proof = "true";
   const tokenCte = input.proof.kind === "token"
     ? `locked_token as materialized (
-        select id from own_auth_tokens
+        select id, password_reset_version from own_auth_tokens
         where token_hash = ${bind(input.proof.tokenHash)} and type = ${bind(input.proof.type)}
           and email = ${email} and (user_id is null or user_id = ${sourceId})
           and used_at is null and expires_at > ${at}
@@ -42,6 +42,8 @@ export async function claimPostgresEmailOwnership(
         and (auth_user.email_verified_at is null or auth_user.disabled_at is null
           or ${input.proof.kind === "token" && input.proof.type === "password_reset" ? "true" : "false"})
         and ${proof}
+        ${input.proof.kind === "token" && input.proof.type === "password_reset"
+          ? "and auth_user.password_reset_version = (select password_reset_version from locked_token)" : ""}
       for update
     ),
     decision as (
@@ -55,6 +57,7 @@ export async function claimPostgresEmailOwnership(
         email_verified_at = case when decision.keep_original
           then coalesce(auth_user.email_verified_at, ${at}) else null end,
         password_hash = case when decision.keep_original then ${password} else auth_user.password_hash end,
+        password_reset_version = auth_user.password_reset_version + ${input.passwordHash === undefined ? "0" : "1"},
         updated_at = ${at}
       from decision where auth_user.id = decision.id
       returning auth_user.*

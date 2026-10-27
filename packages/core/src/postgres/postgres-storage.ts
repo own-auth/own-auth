@@ -2,6 +2,7 @@ import type {
   AtomicAuthenticationMethodRemovalInput,
   AtomicEmailOwnershipInput,
   AtomicEmailOwnershipResult,
+  AtomicPasswordUpdateInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,
   AtomicInvitationAcceptanceResult,
@@ -21,6 +22,7 @@ import type {
   User
 } from "../types.js";
 import type { AuditEventFilter, AuthStorage, ListUsersFilter } from "../storage.js";
+import { currentPasswordResetTokenSql, insertAuthTokenSql, updatePasswordSql } from "../password-reset-sql.js";
 import {
   buildAuditEventListQuery,
   buildUserListQuery
@@ -220,19 +222,26 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
   }
 
   async createToken(token: AuthToken): Promise<AuthToken> {
-    const row = await this.insertOne("own_auth_tokens", tokenColumns, token, tokenReturning);
-    return mapToken(row);
+    const values: unknown[] = [];
+    const sql = insertAuthTokenSql(token, (value) => { values.push(value); return `$${values.length}`; });
+    const result = await this.db.query<Record<string, unknown>>(sql, values);
+    if (!result.rows[0]) throw new Error("Postgres token creation returned no row");
+    return mapToken(result.rows[0]);
+  }
+
+  async updatePasswordAtomically(input: AtomicPasswordUpdateInput): Promise<User | null> {
+    const values: unknown[] = [];
+    const sql = updatePasswordSql(input, (value) => { values.push(value); return `$${values.length}`; });
+    const result = await this.db.query<Record<string, unknown>>(sql, values);
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
   }
 
   async getTokenByHash(tokenHash: string, type?: TokenType): Promise<AuthToken | null> {
-    const row = type
-      ? await this.selectOne(
-          `${tokenReturning} from own_auth_tokens where token_hash = $1 and type = $2`,
-          [tokenHash, type]
-        )
-      : await this.selectOne(`${tokenReturning} from own_auth_tokens where token_hash = $1`, [
-          tokenHash
-        ]);
+    const row = await this.selectOne(
+      `${tokenReturning} from own_auth_tokens where token_hash = $1 ${type ? "and type = $2" : ""}
+        and ${currentPasswordResetTokenSql("own_auth_tokens")}`,
+      type ? [tokenHash, type] : [tokenHash]
+    );
     return row ? mapToken(row) : null;
   }
 

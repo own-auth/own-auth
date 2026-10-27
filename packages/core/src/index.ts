@@ -362,6 +362,7 @@ export type {
   AtomicAuthEventWrite,
   AtomicEmailOwnershipInput,
   AtomicEmailOwnershipResult,
+  AtomicPasswordUpdateInput,
   AtomicAuthenticationMethodRemovalInput,
   AtomicAuthenticationMethodRemovalResult,
   AtomicInvitationAcceptanceInput,

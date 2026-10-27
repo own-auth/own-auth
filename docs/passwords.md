@@ -123,6 +123,8 @@ Own Auth verifies the current password before updating it. An incorrect current 
 
 After a password change, every other session for the user is revoked. The current session remains valid.
 
+The password write also invalidates every earlier reset link atomically. An authenticated change fails if another request replaced the stored password after the current password was checked. A password hash format upgrade during sign in uses the same guard against overwriting a newer password, while preserving reset links for the unchanged password. See [Password reset storage requirements](/docs/password-reset#upgrade-and-storage-requirements).
+
 ## Password requirements
 
 Configure the minimum password length in the shared Own Auth instance:

@@ -60,6 +60,7 @@ export const sessionColumns: ColumnMap<Session> = {
 };
 
 export const tokenColumns: ColumnMap<AuthToken> = {
+  passwordResetVersion: "password_reset_version",
   id: "id",
   tokenHash: "token_hash",
   type: "type",

@@ -19,6 +19,7 @@ export async function claimD1EmailOwnership(
   const proof = `(?11 = 1 or exists (
     select 1 from own_auth_tokens where token_hash = ?9 and type = ?10 and email = ?3
       and (user_id is null or user_id = ?2) and used_at is null and expires_at > ?4
+      and (type <> 'password_reset' or password_reset_version = auth_user.password_reset_version)
   ))`;
   const originalGuard = `exists (select 1 from own_auth_users
     where id = ? and auth_method_operation_id = ? and email is null)`;
@@ -53,6 +54,7 @@ export async function claimD1EmailOwnership(
       email = case when (select keep_original from original) then email else null end,
       email_verified_at = case when (select keep_original from original) then coalesce(email_verified_at, ?4) else null end,
       password_hash = case when (select keep_original from original) and ?8 = 1 then ?7 else password_hash end,
+      password_reset_version = password_reset_version + ?8,
       updated_at = ?4
       where id in (select id from original)`, [
       input.operationId, input.sourceUserId, input.email, at, input.sessionTokenHash,

@@ -132,6 +132,7 @@
     "./migrations/016_device_authorization.sql": "./migrations/016_device_authorization.sql",
     "./migrations/017_atomic_auth_operations.sql": "./migrations/017_atomic_auth_operations.sql",
     "./migrations/018_cloud.sql": "./migrations/018_cloud.sql",
+    "./migrations/019_password_reset_version.sql": "./migrations/019_password_reset_version.sql",
     "./migrations/d1/*.sql": "./migrations/d1/*.sql",
     "./docs/installation.md": "./docs/installation.md",
     "./docs/cloudflare-d1.md": "./docs/cloudflare-d1.md",

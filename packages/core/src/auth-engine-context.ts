@@ -437,6 +437,9 @@ function createDefaultPersistence(storage?: AuthStorage): {
   close(): Promise<void>;
 } {
   if (storage) {
+    if (typeof storage.updatePasswordAtomically !== "function") {
+      throw new Error("AuthStorage must implement updatePasswordAtomically before accepting password changes.");
+    }
     if (typeof storage.claimEmailOwnershipAtomically !== "function") {
       throw new Error("AuthStorage must implement claimEmailOwnershipAtomically before accepting email ownership claims.");
     }

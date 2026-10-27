@@ -139,7 +139,8 @@ describe("PostgresAuthStorage", () => {
     expect(db.lastCall.sql).toContain("update own_auth_tokens");
     expect(db.lastCall.sql).toContain("used_at is null");
     expect(db.lastCall.sql).toContain("expires_at > $3");
-    expect(db.lastCall.sql).toContain("returning id, token_hash");
+    expect(db.lastCall.sql).toContain("returning password_reset_version, id, token_hash");
+    expect(db.lastCall.sql).toContain("reset_owner.password_reset_version = own_auth_tokens.password_reset_version");
     expect(db.lastCall.params).toEqual(["token_hash", "magic_link", consumedAt]);
   });
 
