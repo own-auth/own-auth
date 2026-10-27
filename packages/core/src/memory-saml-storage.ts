@@ -2,6 +2,7 @@ import { cloneStored, findStored, updateStoredEntity } from "./memory-storage-he
 import type { ConsumeSamlResponseInput, SamlIdentityCommit, SamlStorage } from "./saml-storage.js";
 import type { SamlAssertionReplay, SamlConnection, SamlTransaction } from "./saml-types.js";
 import type { Account, AuditEvent, OrganisationMember, User } from "./types.js";
+import { assertIdentityAuthority } from "./identity-authority.js";
 
 interface MemorySamlRecords {
   users: Map<string, User>;
@@ -11,6 +12,8 @@ interface MemorySamlRecords {
 }
 
 export class MemorySamlStorage implements SamlStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] { return [this.connections, this.transactions, this.assertions]; }
   private readonly connections = new Map<string, SamlConnection>();
   private readonly transactions = new Map<string, SamlTransaction>();
   private readonly assertions = new Map<string, SamlAssertionReplay>();
@@ -89,6 +92,7 @@ export class MemorySamlStorage implements SamlStorage {
   }
 
   async commitIdentity(input: SamlIdentityCommit): Promise<void> {
+    assertIdentityAuthority(input.authorityExpiresAt);
     validateIdentityCommit(this.records, input);
     if (input.user) this.records.users.set(input.user.id, cloneStored(input.user));
     if (input.account) this.records.accounts.set(input.account.id, cloneStored(input.account));

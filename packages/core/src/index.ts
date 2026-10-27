@@ -1,4 +1,11 @@
 export { OwnAuth } from "./auth-engine.js";
+export { isUserErasureCapableStorage } from "./user-erasure.js";
+export type {
+  EraseUserInput, AdministrationEraseUserInput, UserErasureOperationInput,
+  AdministrationUserErasureOperationInput, UserErasureResult,
+  UserErasureOrganisationResolution, UserErasureParticipation, UserErasureSubject,
+  UserErasureCapableStorage, UserErasureStorage, AtomicUserErasureInput, StoredUserErasure
+} from "./user-erasure.js";
 export { createOwnAuth } from "./create-own-auth.js";
 export { OwnAuthAuthorizationServer } from "./auth-engine-authorization-server.js";
 export { OwnAuthSaml } from "./auth-engine-saml.js";

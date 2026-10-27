@@ -20,6 +20,59 @@ const cloudKey = `oac_sk_${"a".repeat(32)}`;
 const webhookSecret = "webhook-secret-that-is-at-least-32-bytes";
 
 describe("Own Auth Cloud", () => {
+  it("withholds local completion until security caches on other instances have expired", async () => {
+    vi.useFakeTimers();
+    try {
+      const storage = new InMemoryAuthStorage();
+      const auth = createOwnAuth({ storage, plugins: [cloud({ key: cloudKey, flushMode: "manual", onWarning() {},
+        fetch: (async (_url, input) => {
+          const event = JSON.parse(String(input?.body)) as { id?: string };
+          return Response.json({ status: "applied", erasure: { eventId: event.id, status: "complete" } });
+        }) as typeof fetch })] });
+      const signup = await auth.signUpEmailPassword({ email: "cache-erasure@example.com", password: "correct-horse" });
+      const operationId = crypto.randomUUID();
+      expect(await auth.eraseUser({ operationId, sessionToken: signup.sessionToken, confirmation: "erase" }))
+        .toMatchObject({ status: "pending", local: "pending", cloud: "complete", pendingLocalStores: ["pending_identity_requests"] });
+      vi.setSystemTime(Date.now() + 5 * 60_000 + 1);
+      expect(await auth.getUserErasure({ operationId })).toMatchObject({ status: "complete", local: "complete", cloud: "complete" });
+      expect((await storage.userErasureStorage.get(operationId))?.subject).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+  it("distinguishes acceptance from complete erasure and recovers outages and lost acknowledgements", async () => {
+    vi.useFakeTimers();
+    try {
+      const storage = new InMemoryAuthStorage();
+      const auth = createOwnAuth({ storage });
+      const target = await auth.createUser({ email: "cloud-erasure@example.com" });
+      let mode = "outage";
+      let remotelyErased = false;
+      const fetchImpl = vi.fn<typeof fetch>(async (_url, input) => {
+        const event = JSON.parse(String(input?.body)) as { id: string };
+        if (mode === "outage") throw new Error("Cloud unavailable");
+        if (mode === "accepted") return Response.json({ status: "applied" });
+        if (mode === "wrong") return Response.json({ status: "applied", erasure: { eventId: "another-request", status: "complete" } });
+        if (mode === "lost") { remotelyErased = true; throw new Error("Acknowledgement lost"); }
+        return Response.json({ status: "stale", erasure: { eventId: event.id, status: remotelyErased ? "complete" : "pending" } });
+      });
+      const runtime = new CloudRuntime({ key: cloudKey, endpoint: "https://cloud.example.com", flushMode: "manual", fetch: fetchImpl, onWarning() {} }, storage.cloudStorage, storage);
+      const now = Date.now();
+      const operationId = crypto.randomUUID();
+      await storage.userErasureStorage.eraseAtomically({ operationId, userId: target.id, expectedUpdatedAt: target.updatedAt,
+        now, protectedUntil: now, pendingStores: [], organisations: [], cloudEvent: runtime.prepareUserErasure(target.id) });
+      for (const phase of ["outage", "accepted", "wrong", "lost"]) {
+        mode = phase;
+        expect(await runtime.flushOutbox()).toMatchObject({ sent: 0, failed: 1, remaining: 1 });
+        expect(await auth.getUserErasure({ operationId })).toMatchObject({ status: "pending", cloud: "pending" });
+        vi.setSystemTime(Date.now() + 60_000);
+      }
+      mode = "complete";
+      expect(await runtime.flushOutbox()).toMatchObject({ sent: 1, failed: 0, remaining: 0 });
+      expect(await auth.getUserErasure({ operationId })).toMatchObject({ status: "complete", cloud: "complete" });
+      expect((await storage.userErasureStorage.get(operationId))?.subject).toBeNull();
+      expect(fetchImpl).toHaveBeenCalledTimes(5);
+      expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain(target.email);
+    } finally { vi.useRealTimers(); }
+  });
   it("publishes the system-only delivery event contract", () => {
     expect(Object.keys(cloudEventContract.systemEvents)).toEqual([
       "email.sent",
@@ -335,13 +388,15 @@ describe("Own Auth Cloud", () => {
   });
 
   it("purges pending delivery events linked through the recipient user", async () => {
-    const storage = new InMemoryAuthStorage().cloudStorage;
+    const authStorage = new InMemoryAuthStorage();
+    const target = await createOwnAuth({ storage: authStorage }).createUser({ email: "delivery-recipient@example.com" });
+    const storage = authStorage.cloudStorage;
     const delivery = createCloudEvent("app_erasure", {
       type: "email.requested",
       data: {
         messageId: "message_1",
         type: "magic_link",
-        recipientUserId: "usr_delete"
+        recipientUserId: target.id
       }
     });
     const unrelated = createCloudEvent("app_erasure", {
@@ -351,12 +406,14 @@ describe("Own Auth Cloud", () => {
     await storage.enqueueCloudEvent(delivery, null, false);
     await storage.enqueueCloudEvent(unrelated, null, false);
 
-    expect(await storage.purgeCloudOutboxForUser("usr_delete")).toBe(1);
+    expect(await storage.purgeCloudOutboxForUser(target.id)).toBe(1);
     expect(await storage.countCloudOutbox()).toBe(1);
   });
 
   it("purges pending invitation events linked through the user's email", async () => {
-    const storage = new InMemoryAuthStorage().cloudStorage;
+    const authStorage = new InMemoryAuthStorage();
+    const inviter = await createOwnAuth({ storage: authStorage }).createUser({ email: "inviter@example.com" });
+    const storage = authStorage.cloudStorage;
     const invitation = createCloudEvent("app_erasure", {
       type: "org.invite.created",
       data: {
@@ -366,7 +423,7 @@ describe("Own Auth Cloud", () => {
         role: "member",
         expiresAt: "2026-09-01T00:00:00.000Z"
       },
-      userId: "usr_inviter",
+      userId: inviter.id,
       entity: { type: "org", id: "org_1" }
     });
     await storage.enqueueCloudEvent(invitation, { type: "org", id: "org_1" }, false);

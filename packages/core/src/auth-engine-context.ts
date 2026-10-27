@@ -65,6 +65,8 @@ import { isCloudCapableStorage, type CloudStorage } from "./cloud-storage.js";
 import { CloudRuntime } from "./cloud-runtime.js";
 
 export interface AuthEngineContext {
+  userErasureMaxAuthenticationAgeMs: number;
+  erasurePlugins: readonly import("./plugin-types.js").OwnAuthPluginDefinition[];
   storage: AuthStorage;
   rateLimitStore: RateLimitStore;
   emailProvider: EmailProvider;
@@ -232,6 +234,8 @@ export function createAuthEngineContext(options: OwnAuthOptions = {}): AuthEngin
   const password = normalizePasswordOptions(options.password);
 
   return {
+    userErasureMaxAuthenticationAgeMs: positiveInteger(options.userErasure?.maxAuthenticationAgeMs ?? 5 * minute, "userErasure.maxAuthenticationAgeMs"),
+    erasurePlugins: options.plugins ?? [],
     storage: persistence.storage,
     rateLimitStore: options.rateLimitStore ?? persistence.rateLimitStore,
     emailProvider: options.emailProvider ?? cloud?.emailProvider ?? new ConsoleEmailProvider(),
@@ -445,7 +449,7 @@ function createDefaultPersistence(storage?: AuthStorage): {
     }
     return {
       storage,
-      rateLimitStore: new InMemoryRateLimitStore(),
+      rateLimitStore: (storage as AuthStorage & { rateLimitStore?: RateLimitStore }).rateLimitStore ?? new InMemoryRateLimitStore(),
       close: noOpClose
     };
   }
@@ -454,9 +458,10 @@ function createDefaultPersistence(storage?: AuthStorage): {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (nodeEnv === "test") {
+    const memory = new InMemoryAuthStorage();
     return {
-      storage: new InMemoryAuthStorage(),
-      rateLimitStore: new InMemoryRateLimitStore(),
+      storage: memory,
+      rateLimitStore: memory.rateLimitStore,
       close: noOpClose
     };
   }

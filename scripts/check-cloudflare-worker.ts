@@ -69,6 +69,8 @@ try {
   await assertChecks(await postAction(`${origin}/conformance/scim-engine`), "SCIM engine");
   await assertChecks(await postAction(`${origin}/conformance/schema`), "D1 schema");
   await assertChecks(await postAction(`${origin}/conformance/webhook-flow`), "D1 webhook flow");
+  const erasure = await postAction(`${origin}/conformance/user-erasure`);
+  if (!isRecord(erasure) || typeof erasure.operationId !== "string") throw new Error("D1 erasure returned no durable receipt");
   await assertChecks(
     await postAction(`${origin}/conformance/password-hashing`),
     "Worker password hashing"
@@ -140,10 +142,12 @@ try {
     throw new Error("D1 data did not survive a repeated migration run and Worker restart");
   }
   await assertChecks(await postAction(`${origin}/conformance/schema`), "restarted D1 schema");
+  await assertChecks(await postEncoded(`${origin}/conformance/user-erasure-restart`, { operationId: erasure.operationId }), "restarted D1 erasure");
 
   console.log(
     `Cloudflare D1 passed ${atomicAdapterCases.length} atomic cases, ` +
     `${authConcurrencyCases.length} auth races, device authorization, DPoP, SAML, SCIM, ` +
+    `${Number(erasure.cases)} user erasure cases, erasure rollback and restart, ` +
     "webhook, lifecycle, migration, " +
     "secret, and close checks."
   );

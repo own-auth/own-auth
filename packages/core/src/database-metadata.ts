@@ -17,7 +17,8 @@ export const coreMigrationFiles = [
   "016_device_authorization.sql",
   "017_atomic_auth_operations.sql",
   "018_cloud.sql",
-  "019_password_reset_version.sql"
+  "019_password_reset_version.sql",
+  "020_user_erasure.sql"
 ] as const;
 
 export const initialMigration = coreMigrationFiles[0];
@@ -25,6 +26,7 @@ export const initialMigration = coreMigrationFiles[0];
 export const databaseTables = {
   migrations: "own_auth_migrations",
   users: "own_auth_users",
+  userErasures: "own_auth_user_erasures",
   accounts: "own_auth_accounts",
   sessions: "own_auth_sessions",
   tokens: "own_auth_tokens",

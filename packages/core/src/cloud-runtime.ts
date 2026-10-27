@@ -3,6 +3,7 @@ import { resolveFetchImplementation } from "./fetch-implementation.js";
 import type { EmailMessage, EmailProvider, SmsMessage, SmsProvider } from "./providers.js";
 import type { CloudSnapshotRecord, CloudStorage } from "./cloud-storage.js";
 import type { AuthStorage } from "./storage.js";
+import { isUserErasureCapableStorage } from "./user-erasure.js";
 import {
   cloudAppId,
   auditCloudEvent,
@@ -61,6 +62,14 @@ const memberAddedAuditEvents = new Set([
 ]);
 
 export class CloudRuntime {
+  prepareUserErasure(userId: string): CloudEvent {
+    return createCloudEvent(this.appId, {
+      type: "user.deleted", data: { userId }, entity: { type: "user", id: userId },
+      priority: true, userId
+    });
+  }
+
+  forgetErasedUser(userId: string): void { this.security.eraseUser(userId); }
   readonly emailProvider: EmailProvider;
   readonly smsProvider: SmsProvider;
   readonly webhookPath: string | null;
@@ -211,11 +220,23 @@ export class CloudRuntime {
     }
     for (const record of priority) {
       try {
-        await this.cloudRequest("/ingest/priority", {
+        const response = await this.cloudRequest("/ingest/priority", {
           method: "POST",
           body: JSON.stringify(record.event),
           signal: input.signal
         });
+        if (isUserErasureCapableStorage(this.authStorage) &&
+          await this.authStorage.userErasureStorage.isCloudErasure(record.id)) {
+          const body: unknown = await response.json().catch(() => null);
+          if (!confirmedCloudErasure(body, record.id)) {
+            failed += 1;
+            await this.retry(record.id, record.attempts + 1);
+            continue;
+          }
+          await this.authStorage.userErasureStorage.settleCloud(record.id);
+          sent += 1;
+          continue;
+        }
         await this.storage.acknowledgeCloudOutbox([record.id], new Date());
         sent += 1;
       } catch {
@@ -609,6 +630,14 @@ export class CloudRuntime {
     if (this.options.onWarning) this.options.onWarning(message);
     else console.warn(`[own-auth cloud] ${message}`);
   }
+}
+
+function confirmedCloudErasure(value: unknown, eventId: string): boolean {
+  if (!value || typeof value !== "object") return false;
+  const erasure = (value as { erasure?: unknown }).erasure;
+  return Boolean(erasure && typeof erasure === "object" &&
+    (erasure as Record<string, unknown>).eventId === eventId &&
+    (erasure as Record<string, unknown>).status === "complete");
 }
 
 async function backfillPace(recordCount: number, signal?: AbortSignal): Promise<void> {

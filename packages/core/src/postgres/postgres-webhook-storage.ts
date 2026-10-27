@@ -130,8 +130,8 @@ export class PostgresWebhookStorage implements WebhookStorage {
            next_attempt_at = $5,
            lease_token = null,
            lease_expires_at = null,
-           delivered_at = case when $4 = 'delivered' then $6 else null end,
-           failed_at = case when $4 = 'failed' then $6 else null end,
+           delivered_at = case when $4 = 'delivered' then $6::timestamptz else null end,
+           failed_at = case when $4 = 'failed' then $6::timestamptz else null end,
            last_status_code = $7,
            last_error_code = $8,
            updated_at = $6

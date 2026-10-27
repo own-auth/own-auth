@@ -176,7 +176,7 @@ export function traceWebhookDelivery<Result extends {
   errorCode: string | null;
   finishedAt: Date;
   nextAttemptAt: Date;
-}>(
+} | null>(
   endpointId: string,
   eventType: string,
   attempt: number,

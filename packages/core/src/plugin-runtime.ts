@@ -260,7 +260,8 @@ export class OwnAuthPluginRuntime {
     await enforceRateLimit(this.rateLimitStore, {
       key: `plugin:${registered.plugin.id}:${definition.id}:${key}`,
       limit: definition.limit,
-      windowMs: definition.windowMs
+      windowMs: definition.windowMs,
+      ownerUserId: definition.key === "ip" ? undefined : context.session?.user.id
     });
   }
 

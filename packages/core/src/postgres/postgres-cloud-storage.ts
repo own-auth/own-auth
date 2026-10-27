@@ -111,7 +111,7 @@ export class PostgresCloudStorage implements CloudStorage {
 
   async clearCloudOutbox(includePriority: boolean): Promise<number> {
     const result = await this.db.query<{ id: string }>(
-      `delete from own_auth_cloud_outbox ${includePriority ? "" : "where priority = false"} returning id`
+      `delete from own_auth_cloud_outbox where ${includePriority ? "true" : "priority = false"} and not ${pendingErasureCloudEventSql("postgres")} returning id`
     );
     return result.rows.length;
   }
@@ -119,7 +119,7 @@ export class PostgresCloudStorage implements CloudStorage {
   async purgeCloudOutboxForUser(userId: string, email?: string | null): Promise<number> {
     const result = await this.db.query<{ id: string }>(
       `delete from own_auth_cloud_outbox
-       where ack_at is null and (
+       where ack_at is null and not ${pendingErasureCloudEventSql("postgres")} and (
          payload #>> '{data,userId}' = $1 or
          payload #>> '{data,actorId}' = $1 or
          (payload #>> '{data,targetType}' = 'user' and payload #>> '{data,targetId}' = $1) or
@@ -372,3 +372,4 @@ function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error &&
     (error as { code?: unknown }).code === "23505");
 }
+import { pendingErasureCloudEventSql } from "../user-erasure-sql-match.js";

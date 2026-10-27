@@ -68,6 +68,7 @@ export interface OwnAuthOptions<
   passkeys?: PasskeyOptions;
   webhooks?: WebhookOptions;
   administration?: AdministrationOptions;
+  userErasure?: { maxAuthenticationAgeMs?: number };
   authorizationServer?: AuthorizationServerOptions;
   saml?: SamlProvider;
   scim?: ScimOptions;

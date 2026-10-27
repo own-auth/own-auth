@@ -294,7 +294,7 @@ export interface Invitation<CustomRole extends string = never> {
   email: string | null;
   phone: string | null;
   role: OrganisationRole<CustomRole>;
-  invitedByUserId: string;
+  invitedByUserId: string | null;
   status: InvitationStatus;
   expiresAt: Date;
   acceptedAt: Date | null;

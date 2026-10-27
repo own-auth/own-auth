@@ -17,7 +17,7 @@ export async function claimD1EmailOwnership(
   const samlOrganisationId = input.proof.kind === "provider" ? input.proof.samlOrganisationId : undefined;
   const statement = (sql: string, values: unknown[]) => db.prepare(sql).bind(...values.map(toD1Value));
   const retention = emailOwnershipRetentionSql("auth_user", "?5", "?6", "?4", "?12");
-  const proof = `(?11 = 1 or exists (
+  const proof = `(?14 is null or ?14 > (julianday('now') - 2440587.5) * 86400000) and (?11 = 1 or exists (
     select 1 from own_auth_tokens where token_hash = ?9 and type = ?10 and email = ?3
       and (user_id is null or user_id = ?2) and used_at is null and expires_at > ?4
       and (type <> 'password_reset' or password_reset_version = auth_user.password_reset_version)
@@ -38,6 +38,7 @@ export async function claimD1EmailOwnership(
   const proofHash = bind(tokenHash);
   const proofType = bind(tokenType);
   const provider = bind(providerProof);
+  const authority = bind(input.proof.expiresAt ?? null);
   const primary = input.replacementAccount;
   const ownerGuard = `exists (select 1 from own_auth_users
     where id in (?, ?) and email = ? and auth_method_operation_id = ?)`;
@@ -64,18 +65,18 @@ export async function claimD1EmailOwnership(
       input.verifiedAccountId ?? null, input.passwordHash ?? null,
       input.passwordHash === undefined ? 0 : 1, tokenHash, tokenType, providerProof,
       input.proof.kind === "provider" ? input.proof.originalActorUserId ?? null : null,
-      samlOrganisationId ?? null
+      samlOrganisationId ?? null, input.proof.expiresAt ?? null
     ]),
     statement(`insert into own_auth_users (${newColumns}, auth_method_operation_id)
       select ${newValues}, ${operation}
-      where exists (select 1 from own_auth_users
+      where (${authority} is null or ${authority} > (julianday('now') - 2440587.5) * 86400000) and (exists (select 1 from own_auth_users
           where id = ${sourceId} and email is null and auth_method_operation_id = ${operation})
         or (${sourceId} is null
           and not exists (select 1 from own_auth_users where email = ${email})
           and (${provider} = 1 or exists (
             select 1 from own_auth_tokens where token_hash = ${proofHash} and type = ${proofType}
               and email = ${email} and user_id is null and used_at is null and expires_at > ${timestamp}
-          )))`, replacementValues),
+          ))))`, replacementValues),
     statement(`delete from own_auth_accounts
       where user_id = ? and provider in ('password', 'magic_link') and provider_account_id = ?
         and ${originalGuard}`, [input.sourceUserId, input.email, input.sourceUserId, input.operationId]),

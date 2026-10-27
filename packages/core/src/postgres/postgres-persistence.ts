@@ -2,6 +2,7 @@ import { createAuthClosedError } from "../errors.js";
 import { PostgresRateLimitStore } from "./postgres-rate-limit-store.js";
 import { PostgresAuthStorage } from "./postgres-storage.js";
 import type { PostgresQueryable, PostgresQueryResult } from "./postgres-types.js";
+import { postgresTransaction } from "./postgres-transactions.js";
 
 interface OwnedPostgresPool extends PostgresQueryable {
   end(): Promise<void>;
@@ -29,6 +30,14 @@ class LazyPostgresQueryable implements PostgresQueryable {
     const pool = await this.getPool();
     this.assertOpen();
     return pool.query<Row>(sql, params);
+  }
+
+  async transaction<T>(work: (client: PostgresQueryable) => Promise<T>): Promise<T> {
+    this.assertOpen();
+    const pool = await this.getPool();
+    this.assertOpen();
+    if (!pool.transaction) throw new Error("Postgres pool does not provide transaction support");
+    return pool.transaction(work);
   }
 
   close(): Promise<void> {
@@ -112,6 +121,7 @@ async function loadPostgresPool(connectionString: string): Promise<OwnedPostgres
   }
 
   return {
+    transaction: (work) => postgresTransaction(pool as PostgresQueryable, work),
     async query<Row = Record<string, unknown>>(
       sql: string,
       params?: readonly unknown[]

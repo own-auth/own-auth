@@ -166,6 +166,20 @@ export class OwnAuthClient {
     this.clearSession();
   }
 
+  async eraseUser(input: OwnAuthEndpointInputMap["eraseUser"]): Promise<OwnAuthEndpointOutputMap["eraseUser"]> {
+    const revision = this.sessionRevision;
+    const userId = this.snapshot.data?.user.id;
+    try {
+      const result = await this.request("eraseUser", input);
+      if (this.sessionRevision === revision || userId && this.snapshot.data?.user.id === userId) this.clearSession();
+      return result;
+    } catch (error) {
+      const failure = clientErrorFromUnknown(error);
+      if (failure.status === 0 || failure.status >= 500) await this.getSession().catch(() => undefined);
+      throw error;
+    }
+  }
+
   async changePassword(
     input: OwnAuthEndpointInputMap["changePassword"]
   ): Promise<PublicAuthUser> {
@@ -406,13 +420,21 @@ export class OwnAuthClient {
       init.body = JSON.stringify(input);
     }
 
-    const { body } = await requestJsonWithCloudChallenge(
-      this.fetchImpl,
-      `${this.baseURL}${endpoint.path}`,
-      init,
-      this.cloudOptions
-    );
-    return body as OwnAuthEndpointOutputMap[Id];
+    const revision = this.sessionRevision;
+    try {
+      const { body } = await requestJsonWithCloudChallenge(
+        this.fetchImpl,
+        `${this.baseURL}${endpoint.path}`,
+        init,
+        this.cloudOptions
+      );
+      return body as OwnAuthEndpointOutputMap[Id];
+    } catch (error) {
+      if (error instanceof OwnAuthClientError && error.code === "invalid_session" && this.sessionRevision === revision) {
+        this.clearSession();
+      }
+      throw error;
+    }
   }
 
   private async resolveHeaders(): Promise<OwnAuthClientHeaders> {

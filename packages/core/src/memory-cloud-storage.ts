@@ -17,6 +17,7 @@ interface MemoryCloudCommand {
   nonce: string;
   action: CloudCommandPayload["action"];
   payloadHash: string;
+  payload: CloudCommandPayload;
   status: "reserved" | "completed" | "failed";
   result: CloudCommandResult | null;
   reservedAt: Date;
@@ -25,6 +26,12 @@ interface MemoryCloudCommand {
 }
 
 export class MemoryCloudStorage implements CloudStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] { return [this.outbox, this.commands]; }
+  /** @internal */
+  get erasureOutbox(): Map<string, CloudOutboxRecord> { return this.outbox; }
+  /** @internal */
+  get erasureVersions(): Map<string, number> { return this.entityVersions; }
   readonly durable = false;
   private readonly outbox = new Map<string, CloudOutboxRecord>();
   private readonly entityVersions = new Map<string, number>();
@@ -38,6 +45,7 @@ export class MemoryCloudStorage implements CloudStorage {
     sessions: Map<string, Session>;
     organisations: Map<string, Organisation>;
     members: Map<string, OrganisationMember<string>>;
+    isErasureEvent?(id: string): Promise<boolean>;
   }) {}
 
   async enqueueCloudEvent(
@@ -56,7 +64,6 @@ export class MemoryCloudStorage implements CloudStorage {
     if (entity) {
       const key = `${entity.type}:${entity.id}`;
       const version = (this.entityVersions.get(key) ?? 0) + 1;
-      this.entityVersions.set(key, version);
       stored.entityVersion = version;
     }
     const now = new Date(event.timestamp);
@@ -71,6 +78,7 @@ export class MemoryCloudStorage implements CloudStorage {
       nextRetryAt: now,
       leaseUntil: null
     });
+    if (entity) this.entityVersions.set(`${entity.type}:${entity.id}`, stored.entityVersion!);
     return structuredClone(stored);
   }
 
@@ -118,6 +126,7 @@ export class MemoryCloudStorage implements CloudStorage {
     let deleted = 0;
     for (const [id, record] of this.outbox) {
       if (!includePriority && record.priority) continue;
+      if (record.priority && await this.source.isErasureEvent?.(id)) continue;
       this.outbox.delete(id);
       deleted += 1;
     }
@@ -128,6 +137,7 @@ export class MemoryCloudStorage implements CloudStorage {
     let deleted = 0;
     for (const [id, record] of this.outbox) {
       if (record.ackAt || !cloudEventReferencesUser(record.event, userId, email)) continue;
+      if (record.priority && await this.source.isErasureEvent?.(id)) continue;
       this.outbox.delete(id);
       deleted += 1;
     }
@@ -211,6 +221,7 @@ export class MemoryCloudStorage implements CloudStorage {
       nonce: input.nonce,
       action: input.action,
       payloadHash: input.payloadHash,
+      payload: structuredClone(input.payload),
       status: "reserved",
       result: null,
       reservedAt: new Date(input.now),

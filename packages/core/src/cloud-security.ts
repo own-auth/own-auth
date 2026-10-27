@@ -18,6 +18,7 @@ import {
   cloudSignInOperations,
   invalidCloudChallenge,
   isCloudSecurityDecision,
+  maximumCloudSecurityCacheAgeMs,
   safeCloudError
 } from "./cloud-runtime-helpers.js";
 
@@ -161,6 +162,7 @@ export class CloudSecurity {
     cached: { decision: CloudSecurityDecision; expiresAt: number } | undefined
   ): Promise<CloudSecurityDecision> {
     const userId = context.userId;
+    const requestedAt = Date.now();
     try {
       const response = await this.dependencies.request("/security/check", {
         method: "POST",
@@ -180,10 +182,18 @@ export class CloudSecurity {
       this.circuitFailures = 0;
       this.circuitOpenUntil = 0;
       if (key && decision.decision !== "allow" && (userId || decision.decision !== "deny")) {
-        this.decisionCache.set(key, {
+        const entry = {
           decision,
-          expiresAt: Date.now() + Math.max(0, Math.min(decision.cacheTtlMs ?? 300_000, 300_000))
-        });
+          expiresAt: requestedAt + Math.max(0, Math.min(
+            decision.cacheTtlMs ?? maximumCloudSecurityCacheAgeMs, maximumCloudSecurityCacheAgeMs
+          ))
+        };
+        if (entry.expiresAt <= Date.now()) return decision;
+        this.decisionCache.set(key, entry);
+        const timer = setTimeout(() => {
+          if (this.decisionCache.get(key) === entry) this.decisionCache.delete(key);
+        }, Math.max(0, entry.expiresAt - Date.now()));
+        timer.unref?.();
       }
       return decision;
     } catch (error) {

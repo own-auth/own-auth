@@ -56,6 +56,7 @@ describe("InMemoryAuthStorage", () => {
 
   it("clones webhook delivery seed dates before storing them", async () => {
     const storage = new InMemoryAuthStorage();
+    await storage.createUser(memoryUser());
     const createdAt = new Date("2026-07-15T12:00:00.000Z");
     const createdAtMs = createdAt.getTime();
 

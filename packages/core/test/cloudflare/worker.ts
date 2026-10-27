@@ -1,4 +1,5 @@
 import type { D1DatabaseLike } from "../../dist/d1/index.js";
+import { handleUserErasureQualification, handleUserErasureRestart } from "./worker-user-erasure-conformance.js";
 import {
   conformanceErrorResponse,
   handleAuthRpc,
@@ -32,6 +33,10 @@ export default {
 
     try {
       switch (path) {
+        case "/conformance/user-erasure":
+          return await handleUserErasureQualification(env.DB);
+        case "/conformance/user-erasure-restart":
+          return await handleUserErasureRestart(request, env.DB);
         case "/conformance/auth":
           return await handleAuthRpc(request, env.DB);
         case "/conformance/authorization-storage":
@@ -68,6 +73,7 @@ export default {
           return new Response("Not found", { status: 404 });
       }
     } catch (error) {
+      console.error(error);
       return conformanceErrorResponse(error);
     }
   }

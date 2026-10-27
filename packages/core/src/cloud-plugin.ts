@@ -16,6 +16,7 @@ export function cloud(options: CloudPluginOptions): CloudPluginDefinition {
   return defineOwnAuthPlugin({
     id: "cloud",
     version: "1.0.0",
+    userErasure: { personalData: false },
     __ownAuthCloud: normalized
   });
 }

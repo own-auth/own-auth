@@ -21,7 +21,7 @@ export async function claimPostgresEmailOwnership(
   const samlOrganisationId = input.proof.kind === "provider" ? input.proof.samlOrganisationId : undefined;
   const password = input.passwordHash === undefined ? "auth_user.password_hash" : bind(input.passwordHash);
   const newId = bind(input.replacementUser.id);
-  let proof = "true";
+  let proof = input.proof.expiresAt ? `clock_timestamp() < ${bind(input.proof.expiresAt)}::timestamptz` : "true";
   const tokenCte = input.proof.kind === "token"
     ? `locked_token as materialized (
         select id, password_reset_version from own_auth_tokens
@@ -31,7 +31,7 @@ export async function claimPostgresEmailOwnership(
         for update
       ),`
     : "";
-  if (input.proof.kind === "token") proof = "exists (select 1 from locked_token)";
+  if (input.proof.kind === "token") proof += " and exists (select 1 from locked_token)";
   const membershipCte = samlOrganisationId
     ? `locked_membership as materialized (
         select status from own_auth_organisation_members

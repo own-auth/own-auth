@@ -93,6 +93,7 @@ export async function unlinkOAuthProvider(
 }
 
 interface ExternalIdentityResolutionInput {
+  authorityExpiresAt?: Date;
   intent: "sign_in" | "link";
   userId?: string;
   request?: RequestContext;
@@ -120,10 +121,10 @@ export async function resolveExternalIdentity(
     let user = await requireActiveUser(ctx, input.userId);
     if (email && email === user.email) {
       user = await claimEmailOwnership(ctx, {
-        user, email, proof: { kind: "provider", originalActorUserId: input.userId }, request: input.request
+        user, email, proof: { kind: "provider", originalActorUserId: input.userId, expiresAt: input.authorityExpiresAt }, request: input.request
       });
     }
-    const account = await createLinkedAccount(ctx, user, identity, email, input.request);
+    const account = await createLinkedAccount(ctx, user, identity, email, input.request, input.authorityExpiresAt);
     return { user, account };
   }
 
@@ -156,7 +157,7 @@ async function resolveLinkedExternalIdentity(
   const email = verifiedEmail(identity);
   if (email && email === user.email) {
     user = await claimEmailOwnership(ctx, {
-      user, email, proof: { kind: "provider", originalActorUserId: input.userId },
+      user, email, proof: { kind: "provider", originalActorUserId: input.userId, expiresAt: input.authorityExpiresAt },
       verifiedAccountId: account.id, request: input.request
     });
   }
@@ -176,9 +177,9 @@ async function linkExternalIdentityByEmail(
     throw new AuthError("account_linking_required", "Sign in to the existing account before linking this provider", 409);
   }
   const owner = await claimEmailOwnership(ctx, {
-    user, email, proof: { kind: "provider", originalActorUserId: input.userId }, request: input.request
+    user, email, proof: { kind: "provider", originalActorUserId: input.userId, expiresAt: input.authorityExpiresAt }, request: input.request
   });
-  const account = await createLinkedAccount(ctx, owner, identity, email, input.request);
+  const account = await createLinkedAccount(ctx, owner, identity, email, input.request, input.authorityExpiresAt);
   return { user: owner, account };
 }
 
@@ -229,11 +230,12 @@ async function createLinkedAccount(
   user: User,
   identity: VerifiedProviderIdentity,
   email: string | null,
-  request?: RequestContext
+  request?: RequestContext,
+  authorityExpiresAt?: Date
 ): Promise<Account> {
   try {
     const account = await ctx.storage.createAccount(
-      accountFor(user.id, identity.provider, identity.providerAccountId, email, null, new Date())
+      accountFor(user.id, identity.provider, identity.providerAccountId, email, null, new Date()), authorityExpiresAt
     );
     await auditLinked(ctx, user.id, identity.provider, request);
     return account;
@@ -280,7 +282,7 @@ async function createExternalUserAndAccount(
     now
   );
   try {
-    const account = await ctx.storage.createUserAndAccount(user, accountInput);
+    const account = await ctx.storage.createUserAndAccount(user, accountInput, input.authorityExpiresAt);
     await audit(ctx, {
       eventType: "user.signed_up",
       actorUserId: user.id,
@@ -291,6 +293,9 @@ async function createExternalUserAndAccount(
     await auditLinked(ctx, user.id, identity.provider, input.request);
     return { user, account };
   } catch (error) {
+    if (input.authorityExpiresAt && input.authorityExpiresAt.getTime() <= Date.now()) {
+      throw new AuthError("oauth_transaction_invalid", "OAuth transaction is invalid or expired", 400);
+    }
     const account = await ctx.storage.getAccountByProvider(
       identity.provider,
       identity.providerAccountId
@@ -326,8 +331,9 @@ export async function createExternalProviderSession(
   ctx: AuthEngineContext,
   user: User,
   provider: ExternalAccountProvider,
-  request?: RequestContext
+  request?: RequestContext,
+  authorityExpiresAt?: Date
 ): Promise<SignInResult> {
   assertUserEnabled(user);
-  return completeFirstFactor(ctx, user, provider, request);
+  return completeFirstFactor(ctx, user, provider, request, authorityExpiresAt);
 }

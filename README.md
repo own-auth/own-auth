@@ -6,6 +6,8 @@ Framework-independent authentication for TypeScript, with auth data that stays u
 
 ## Quickstart
 
+Complete account erasure removes Own Auth credentials, sessions, and personal audit records, with recoverable plugin and Cloud cleanup. See [user erasure](./docs/user-erasure.md) for authorization, ownership decisions, retries, and required migrations.
+
 Get your first login working in under five minutes. You need Node.js 20+ and a Postgres database.
 
 ### Install

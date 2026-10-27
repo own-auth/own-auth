@@ -43,6 +43,60 @@ function createClientHarness() {
 }
 
 describe("OwnAuthClient", () => {
+  it("clears a cached account when another session has erased it", async () => {
+    const client = createOwnAuthClient({ baseURL: "http://localhost/api/auth", fetch: (async (url) =>
+      String(url).endsWith("/session") ? Response.json({ session: publicSession("erased-elsewhere@example.com") }) :
+        Response.json({ error: { code: "invalid_session", message: "Session is no longer valid" } }, { status: 401 })) as typeof fetch });
+    await client.getSession();
+    await expect(client.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase" })).rejects.toMatchObject({ code: "invalid_session" });
+    expect(client.getSessionSnapshot().data).toBeNull();
+  });
+
+  it("preserves a newer login when an older request returns an invalid session error", async () => {
+    let rejectOld!: (response: Response) => void;
+    const oldResponse = new Promise<Response>((resolve) => { rejectOld = resolve; });
+    const client = createOwnAuthClient({ baseURL: "http://localhost/api/auth", fetch: (async (url) => {
+      if (String(url).endsWith("/user/erase")) return oldResponse;
+      if (String(url).endsWith("/session")) return Response.json({ session: publicSession("old@example.com") });
+      return Response.json(publicSession("new@example.com"));
+    }) as typeof fetch });
+    await client.getSession();
+    const old = client.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase" });
+    await client.signUpEmailPassword({ email: "new@example.com", password: "correct-horse" });
+    rejectOld(Response.json({ error: { code: "invalid_session", message: "Old session expired" } }, { status: 401 }));
+    await expect(old).rejects.toMatchObject({ code: "invalid_session" });
+    expect(client.getSessionSnapshot().data?.user.email).toBe("new@example.com");
+  });
+  it("clears the erased account through the real client and HTTP handler", async () => {
+    const client = createClientHarness();
+    await client.signUpEmailPassword({ email: "erased-client@example.com", password: "correct-horse" });
+    expect(await client.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase" })).toMatchObject({ status: "complete" });
+    expect(client.getSessionSnapshot().data).toBeNull();
+    expect(await client.getSession()).toBeNull();
+  });
+
+  it("does not let an older session response restore state after pending erasure", async () => {
+    let resolveSession!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { resolveSession = resolve; });
+    const client = createOwnAuthClient({ baseURL: "http://localhost/api/auth", fetch: (async (url) =>
+      String(url).endsWith("/session") ? pending : Response.json({ operationId: "opaque", status: "pending", local: "pending", cloud: "pending", pendingLocalStores: [] }, { status: 202 })) as typeof fetch });
+    const session = client.getSession();
+    await client.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase" });
+    resolveSession(Response.json({ session: publicSession("erased@example.com") }));
+    expect(await session).toBeNull();
+    expect(client.getSessionSnapshot().data).toBeNull();
+  });
+
+  it("refreshes session state after a lost erasure response without claiming completion", async () => {
+    let erased = false;
+    const client = createOwnAuthClient({ baseURL: "http://localhost/api/auth", fetch: (async (url) => {
+      if (String(url).endsWith("/user/erase")) { erased = true; throw new Error("connection lost"); }
+      return Response.json({ session: erased ? null : publicSession("lost@example.com") });
+    }) as typeof fetch });
+    await client.getSession();
+    await expect(client.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase" })).rejects.toBeInstanceOf(OwnAuthClientError);
+    expect(client.getSessionSnapshot().data).toBeNull();
+  });
   it("shares one initial session request between subscribers", async () => {
     let requestCount = 0;
     const client = createOwnAuthClient({

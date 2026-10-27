@@ -61,7 +61,7 @@ export async function verifyMagicLink(
   const user = await claimEmailOwnership(ctx, {
     user: candidate,
     email: token.email,
-    proof: { kind: "token", tokenHash: token.tokenHash, type: "magic_link" },
+    proof: { kind: "token", tokenHash: token.tokenHash, type: "magic_link", expiresAt: token.expiresAt },
     sessionToken: input.sessionToken,
     request: input.request
   });
@@ -107,7 +107,7 @@ export async function verifyEmail(
   return claimEmailOwnership(ctx, {
     user,
     email,
-    proof: { kind: "token", tokenHash: token.tokenHash, type: "email_verification" },
+    proof: { kind: "token", tokenHash: token.tokenHash, type: "email_verification", expiresAt: token.expiresAt },
     sessionToken: input.sessionToken,
     request: input.request
   });
@@ -148,7 +148,7 @@ export async function resetPassword(
   const updatedUser = await claimEmailOwnership(ctx, {
     user,
     email,
-    proof: { kind: "token", tokenHash: candidate.tokenHash, type: "password_reset" },
+    proof: { kind: "token", tokenHash: candidate.tokenHash, type: "password_reset", expiresAt: candidate.expiresAt },
     passwordHash,
     sessionToken: input.sessionToken,
     request: input.request

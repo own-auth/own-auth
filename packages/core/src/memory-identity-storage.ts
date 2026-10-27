@@ -15,8 +15,14 @@ import {
 } from "./memory-storage-helpers.js";
 import { createIdentityConflictError } from "./errors.js";
 import type { Account } from "./types.js";
+import { assertIdentityAuthority } from "./identity-authority.js";
 
 export class MemoryIdentityStorage {
+  /** @internal Shared parent erasure owns these maps. */
+  protected identityErasureMaps(): Map<string, any>[] {
+    return [this.accounts, this.oauthTransactions, this.oauthCredentials, this.totpFactors,
+      this.recoveryCodes, this.mfaChallenges, this.passkeys, this.webAuthnChallenges];
+  }
   protected hasUnprovedCredentials(userId: string, verifiedAccountId?: string): boolean {
     return someStored(this.accounts, (account) => account.userId === userId &&
       account.provider !== "password" && account.provider !== "magic_link" && account.id !== verifiedAccountId) ||
@@ -32,7 +38,8 @@ export class MemoryIdentityStorage {
   protected readonly passkeys = new Map<string, PasskeyCredential>();
   private readonly webAuthnChallenges = new Map<string, WebAuthnChallenge>();
 
-  async createAccount(account: Account): Promise<Account> {
+  async createAccount(account: Account, authorityExpiresAt?: Date): Promise<Account> {
+    assertIdentityAuthority(authorityExpiresAt);
     if (this.hasProviderAccount(account.provider, account.providerAccountId)) {
       throw createIdentityConflictError("providerAccount");
     }
@@ -227,7 +234,8 @@ export class MemoryIdentityStorage {
       : null;
   }
 
-  async createMfaChallenge(challenge: MfaChallenge): Promise<MfaChallenge> {
+  async createMfaChallenge(challenge: MfaChallenge, authorityExpiresAt?: Date): Promise<MfaChallenge> {
+    assertIdentityAuthority(authorityExpiresAt);
     this.mfaChallenges.set(challenge.id, cloneStored(challenge));
     return cloneStored(challenge);
   }

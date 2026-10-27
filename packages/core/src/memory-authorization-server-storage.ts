@@ -31,6 +31,11 @@ import { MemoryDeviceAuthorizationStorage } from "./memory-device-authorization-
 export class MemoryAuthorizationServerStorage
   extends MemoryProtectedResourceStorage
   implements AuthorizationServerStorage, DpopStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] {
+    return [this.interactions, this.grants, this.codes, this.accessTokens, this.refreshTokens,
+      this.subjects, ...this.deviceAuthorizationStorage.erasureMaps()];
+  }
   readonly dpopStorage = this;
   hasUserAuthorization(userId: string): boolean {
     return [this.interactions, this.grants, this.subjects]

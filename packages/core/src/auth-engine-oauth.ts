@@ -120,7 +120,11 @@ export async function completeOAuthSignIn(
         nonce
       })
     );
+    if (transaction.expiresAt.getTime() <= Date.now()) {
+      throw new AuthError("oauth_transaction_invalid", "OAuth transaction is invalid or expired", 400);
+    }
     const resolved = await resolveExternalIdentity(ctx, exchanged.identity, {
+      authorityExpiresAt: transaction.expiresAt,
       intent: transaction.intent,
       userId: transaction.userId ?? undefined,
       request: input.request
@@ -139,7 +143,8 @@ export async function completeOAuthSignIn(
       ctx,
       resolved.user,
       input.provider,
-      input.request
+      input.request,
+      transaction.expiresAt
     );
     await audit(ctx, {
       eventType: "oauth.signed_in",
@@ -239,11 +244,15 @@ export async function signInWithGoogleOneTap(
     const identity = await traceOAuthProvider("google", "verify_credential", () =>
       verifyCredential(input.credential, input.nonce)
     );
+    if (transaction.expiresAt.getTime() <= Date.now()) {
+      throw new AuthError("oauth_transaction_invalid", "One Tap transaction is invalid or expired", 400);
+    }
     const resolved = await resolveExternalIdentity(ctx, identity, {
+      authorityExpiresAt: transaction.expiresAt,
       intent: "sign_in",
       request: input.request
     });
-    const session = await createExternalProviderSession(ctx, resolved.user, "google", input.request);
+    const session = await createExternalProviderSession(ctx, resolved.user, "google", input.request, transaction.expiresAt);
     await audit(ctx, {
       eventType: "oauth.signed_in",
       actorUserId: resolved.user.id,

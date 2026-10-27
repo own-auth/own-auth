@@ -83,9 +83,13 @@ export async function completeResponse(
       )
     });
     const requestIdHash = hashSamlRequest(ctx, assertion.inResponseTo);
+    const verifiedAt = new Date();
+    if (transaction.expiresAt <= verifiedAt || assertion.expiresAt.getTime() + provider.clockSkewMs <= verifiedAt.getTime()) {
+      throw transactionInvalid();
+    }
     const replayExpiresAt = new Date(Math.max(
       assertion.expiresAt.getTime(),
-      now.getTime() + provider.responseTtlMs + provider.clockSkewMs
+      verifiedAt.getTime() + provider.responseTtlMs + provider.clockSkewMs
     ));
     const consumed = await storage.consumeResponse({
       relayStateHash,
@@ -93,10 +97,10 @@ export async function completeResponse(
       assertion: {
         assertionHash: hashSamlAssertion(ctx, connection.id, assertion.assertionId),
         connectionId: connection.id,
-        consumedAt: now,
+        consumedAt: verifiedAt,
         expiresAt: replayExpiresAt
       },
-      consumedAt: now
+      consumedAt: verifiedAt
     });
     if (!consumed) throw transactionInvalid();
 
@@ -111,7 +115,7 @@ export async function completeResponse(
       return { status: "linked", destination: consumed.destination };
     }
 
-    const result = await completeFirstFactor(ctx, resolved.user, "saml", input.request);
+    const result = await completeFirstFactor(ctx, resolved.user, "saml", input.request, transaction.expiresAt);
     await audit(ctx, {
       eventType: "saml.signed_in",
       actorUserId: resolved.user.id,

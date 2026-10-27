@@ -131,7 +131,7 @@ describe("own-auth CLI", () => {
     expect(exitCode).toBe(0);
     expect(output().stdout).toBe(
       "Database: connected\n" +
-      "Migration version: 019_password_reset_version\n" +
+      "Migration version: 020_user_erasure\n" +
       "Status: current\n"
     );
     expect(output().stderr).toBe("");

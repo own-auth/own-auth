@@ -372,7 +372,7 @@ export function conformanceErrorResponse(error: unknown): Response {
     );
   }
   return Response.json(
-    { error: { message: "Conformance request failed" } },
+    { error: { message: error instanceof Error ? error.message + (error.cause instanceof Error ? `: ${error.cause.message}` : "") : "Conformance request failed" } },
     { status: 500 }
   );
 }

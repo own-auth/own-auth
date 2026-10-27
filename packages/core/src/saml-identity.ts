@@ -28,6 +28,7 @@ export interface ResolvedSamlIdentity {
 }
 
 interface MappedSamlIdentity {
+  authorityExpiresAt?: Date;
   provider: `saml.${string}`;
   providerAccountId: string;
   email: string | null;
@@ -38,10 +39,10 @@ export async function resolveSamlIdentity(
   ctx: AuthEngineContext,
   connection: SamlConnection,
   assertion: SamlVerifiedAssertion,
-  transaction: { intent: SamlIntent; userId: string | null },
+  transaction: { intent: SamlIntent; userId: string | null; expiresAt: Date },
   request?: RequestContext
 ): Promise<ResolvedSamlIdentity> {
-  const identity = mapIdentity(ctx, connection, assertion);
+  const identity = { ...mapIdentity(ctx, connection, assertion), authorityExpiresAt: transaction.expiresAt };
   const existingAccount = await ctx.storage.getAccountByProvider(
     identity.provider,
     identity.providerAccountId
@@ -64,7 +65,7 @@ export async function resolveSamlIdentity(
     return {
       user: await verifyPairedSamlEmail(ctx, {
         samlConnectionId: connection.id, resource: pairedScimUser, user, normalizedEmail: identity.email,
-        verifiedAccountId: account.id, request, originalActorUserId: transaction.userId
+        verifiedAccountId: account.id, request, originalActorUserId: transaction.userId, authorityExpiresAt: transaction.expiresAt
       }),
       linked: true
     };
@@ -77,7 +78,7 @@ export async function resolveSamlIdentity(
     return {
       user: await verifyPairedSamlEmail(ctx, {
         samlConnectionId: connection.id, resource: pairedScimUser, user, normalizedEmail: identity.email,
-        verifiedAccountId: account.id, request
+        verifiedAccountId: account.id, request, authorityExpiresAt: transaction.expiresAt
       }),
       linked: true
     };
@@ -87,7 +88,7 @@ export async function resolveSamlIdentity(
   if (existingUser) {
     return linkIdentityByEmail(ctx, connection, identity, existingUser, identity.email, request);
   }
-  return provisionIdentity(ctx, connection, identity, request);
+  return provisionIdentity(ctx, connection, identity, request, transaction.expiresAt);
 }
 
 async function linkIdentityByEmail(
@@ -108,7 +109,7 @@ async function linkIdentityByEmail(
   }
   await membershipFor(ctx, connection, user.id);
   const owner = await claimEmailOwnership(ctx, {
-    user, email, proof: { kind: "provider", samlOrganisationId: connection.organisationId }, request
+    user, email, proof: { kind: "provider", samlOrganisationId: connection.organisationId, expiresAt: identity.authorityExpiresAt }, request
   });
   await linkIdentity(ctx, connection, identity, owner, request);
   return { user: owner, linked: true };
@@ -118,7 +119,7 @@ async function resolveExistingAccount(
   ctx: AuthEngineContext,
   connection: SamlConnection,
   account: Account,
-  transaction: { intent: SamlIntent; userId: string | null },
+  transaction: { intent: SamlIntent; userId: string | null; expiresAt?: Date },
   email: string | null,
   request?: RequestContext
 ): Promise<ResolvedSamlIdentity> {
@@ -132,7 +133,7 @@ async function resolveExistingAccount(
     user = await claimEmailOwnership(ctx, {
       user, email, verifiedAccountId: account.id, request,
       proof: {
-        kind: "provider", samlOrganisationId: connection.organisationId,
+        kind: "provider", samlOrganisationId: connection.organisationId, expiresAt: transaction.expiresAt,
         originalActorUserId: transaction.intent === "link" ? transaction.userId ?? undefined : undefined
       }
     });
@@ -140,11 +141,11 @@ async function resolveExistingAccount(
   assertUserEnabled(user);
   const paired = email ? await findPairedSamlUser(ctx, connection.id, email) : null;
   if (paired && paired.userId !== user.id) throw identityConflict();
-  await ensureMembership(ctx, connection, user, request);
+  await ensureMembership(ctx, connection, user, request, transaction.expiresAt);
   return {
     user: await verifyPairedSamlEmail(ctx, {
       samlConnectionId: connection.id, resource: paired, user, normalizedEmail: email,
-      verifiedAccountId: account.id, request
+      verifiedAccountId: account.id, request, authorityExpiresAt: transaction.expiresAt
     }),
     linked: transaction.intent === "link"
   };
@@ -196,7 +197,8 @@ async function linkIdentity(
     await storage.commitIdentity({
       account,
       membership,
-      auditEvents
+      auditEvents,
+      authorityExpiresAt: identity.authorityExpiresAt
     });
     await recordCommittedAuthEvents(ctx, auditEvents);
     return account;
@@ -213,7 +215,7 @@ async function linkIdentity(
     );
     if (membership && currentMembership?.status === "active") {
       const committedEvents = auditEvents.slice(0, 1);
-      await storage.commitIdentity({ account, auditEvents: committedEvents });
+      await storage.commitIdentity({ account, auditEvents: committedEvents, authorityExpiresAt: identity.authorityExpiresAt });
       await recordCommittedAuthEvents(ctx, committedEvents);
       return account;
     }
@@ -225,7 +227,8 @@ async function provisionIdentity(
   ctx: AuthEngineContext,
   connection: SamlConnection,
   identity: MappedSamlIdentity,
-  request?: RequestContext
+  request?: RequestContext,
+  authorityExpiresAt?: Date
 ): Promise<ResolvedSamlIdentity> {
   if (!connection.jitProvisioningEnabled) throw membershipRequired();
   const email = identity.email;
@@ -273,10 +276,11 @@ async function provisionIdentity(
   ];
   const { storage } = requireSaml(ctx);
   try {
-    await storage.commitIdentity({ user, account, membership, auditEvents });
+    await storage.commitIdentity({ user, account, membership, auditEvents, authorityExpiresAt });
     await recordCommittedAuthEvents(ctx, auditEvents);
     return { user, linked: true };
   } catch (error) {
+    if (authorityExpiresAt && authorityExpiresAt.getTime() <= Date.now()) throw invalidTransaction();
     const winnerAccount = await ctx.storage.getAccountByProvider(
       identity.provider,
       identity.providerAccountId
@@ -286,7 +290,7 @@ async function provisionIdentity(
         ctx,
         connection,
         winnerAccount,
-        { intent: "sign_in", userId: null },
+        { intent: "sign_in", userId: null, expiresAt: authorityExpiresAt },
         email,
         request
       );
@@ -303,7 +307,8 @@ async function ensureMembership(
   ctx: AuthEngineContext,
   connection: SamlConnection,
   user: User,
-  request?: RequestContext
+  request?: RequestContext,
+  authorityExpiresAt?: Date
 ): Promise<void> {
   if (await membershipFor(ctx, connection, user.id)) return;
   const now = new Date();
@@ -319,7 +324,8 @@ async function ensureMembership(
   try {
     await storage.commitIdentity({
       membership,
-      auditEvents
+      auditEvents,
+      authorityExpiresAt
     });
     await recordCommittedAuthEvents(ctx, auditEvents);
   } catch (error) {

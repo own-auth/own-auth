@@ -19,6 +19,8 @@ interface MemoryScimRecords {
 }
 
 export class MemoryScimStorage implements ScimStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] { return [this.connections, this.tokens, this.scimUsers]; }
   /** @internal Runs inside the parent storage's synchronous email ownership operation. */
   reassignEmailOwner(sourceUserId: string, ownerUserId: string, email: string, at: Date): OrganisationMember<string>[] {
     const memberships: OrganisationMember<string>[] = [];

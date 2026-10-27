@@ -178,6 +178,19 @@ describe("OAuth browser binding in the core API", () => {
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(exchange).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects a provider verification that finishes after the initiating request expires", async () => {
+    const { auth, storage, exchange } = harness();
+    const authorization = await auth.createOAuthAuthorizationUrl({ provider: "google" });
+    exchange.mockImplementationOnce(async () => {
+      vi.spyOn(Date, "now").mockReturnValue(authorization.expiresAt.getTime() + 1);
+      return { identity: { provider: "google", providerAccountId: "browser-bound-user", email: "browser-bound@example.com",
+        emailVerified: true, name: null, imageUrl: null }, refreshToken: null, scopes: [] };
+    });
+    await expect(auth.completeOAuthSignIn({ provider: "google", callbackParameters: callbackParameters(authorization),
+      browserBindingToken: authorization.browserBindingToken })).rejects.toMatchObject({ code: "oauth_transaction_invalid" });
+    expect(await storage.getUserByEmail("browser-bound@example.com")).toBeNull();
+  });
 });
 
 describe("OAuth browser binding in the HTTP handler", () => {

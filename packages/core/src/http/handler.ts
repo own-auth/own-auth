@@ -142,7 +142,7 @@ export function createOwnAuthHandler(
             headers.set("content-type", "application/samlmetadata+xml; charset=utf-8");
             return new Response(execution.body as string, { status: 200, headers });
           }
-          return new Response(JSON.stringify(execution.body), { status: 200, headers });
+          return new Response(JSON.stringify(execution.body), { status: execution.status ?? 200, headers });
         } catch (error) {
           const response = await handleRequestError(
             error,
@@ -263,7 +263,7 @@ async function handleRequestError(
   const known = knownHttpError(error);
   if (known) {
     if (known.status >= 500) await reportError(options.onError, error, request);
-    return errorResponse(known.code, known.message, known.status);
+    return errorResponse(known.code, known.message, known.status, undefined, known.details);
   }
 
   await reportError(options.onError, error, request);
@@ -274,9 +274,10 @@ function knownHttpError(error: unknown): {
   code: OwnAuthHttpErrorCode;
   message: string;
   status: number;
+  details?: import("../errors.js").AuthError["details"];
 } | null {
   if (isAuthError(error)) {
-    return { code: error.code, message: error.safeMessage, status: error.statusCode };
+    return { code: error.code, message: error.safeMessage, status: error.statusCode, details: error.details };
   }
   if (error instanceof OwnAuthPluginError) {
     return { code: error.code, message: error.safeMessage, status: error.statusCode };
@@ -384,9 +385,10 @@ function errorResponse(
   code: OwnAuthHttpErrorCode,
   message: string,
   status: number,
-  extraHeaders: Record<string, string> = {}
+  extraHeaders: Record<string, string> = {},
+  details?: import("../errors.js").AuthError["details"]
 ): Response {
-  const payload: OwnAuthErrorPayload = { error: { code, message } };
+  const payload: OwnAuthErrorPayload = { error: { code, message, ...(details ? { details } : {}) } };
   const headers = responseHeaders();
   for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
   return new Response(JSON.stringify(payload), { status, headers });

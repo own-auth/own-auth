@@ -14,9 +14,10 @@ export class D1StorageBase {
     table: string,
     columns: EntityColumnMap<Entity>,
     entity: Entity,
-    returning: string
+    returning: string,
+    authorityExpiresAt?: Date
   ): Promise<DatabaseRow> {
-    const statement = this.insertStatement(table, columns, entity, returning);
+    const statement = this.insertStatement(table, columns, entity, returning, authorityExpiresAt);
     return expectDatabaseValue(
       await statement.first<DatabaseRow>(),
       `D1 insert into ${table}`
@@ -27,13 +28,16 @@ export class D1StorageBase {
     table: string,
     columns: EntityColumnMap<Entity>,
     entity: Entity,
-    returning: string
+    returning: string,
+    authorityExpiresAt?: Date
   ): D1PreparedStatementLike {
     const entries = databaseColumnEntries(columns, entity);
     return this.prepare(
       `insert into ${table} (${entries.map(([, column]) => column).join(", ")}) ` +
-      `values (${placeholders(entries.length)}) returning ${returning}`,
-      entries.map(([key]) => entity[key])
+      (authorityExpiresAt
+        ? `select ${placeholders(entries.length)} where (julianday('now') - 2440587.5) * 86400000 < ?${entries.length + 1}`
+        : `values (${placeholders(entries.length)})`) + ` returning ${returning}`,
+      [...entries.map(([key]) => entity[key]), ...(authorityExpiresAt ? [authorityExpiresAt] : [])]
     );
   }
 

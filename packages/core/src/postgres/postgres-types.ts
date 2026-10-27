@@ -5,6 +5,7 @@ export interface PostgresQueryResult<Row> {
 }
 
 export interface PostgresQueryable {
+  transaction?<T>(work: (client: PostgresQueryable) => Promise<T>): Promise<T>;
   query<Row = Record<string, unknown>>(
     sql: string,
     params?: readonly unknown[]

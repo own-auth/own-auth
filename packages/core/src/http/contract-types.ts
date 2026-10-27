@@ -4,9 +4,12 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON
 } from "@simplewebauthn/server";
-import type { AuthErrorCode } from "../errors.js";
+import type { AuthError, AuthErrorCode } from "../errors.js";
 import type { MfaMethod } from "../identity-types.js";
 import type { ExternalAccountProvider, SessionAssuranceLevel } from "../types.js";
+import type {
+  AdministrationEraseUserInput, EraseUserInput, UserErasureOperationInput, UserErasureResult
+} from "../user-erasure.js";
 
 export type OwnAuthHttpMethod = "GET" | "POST";
 export type JsonSchema = Readonly<Record<string, unknown>>;
@@ -110,6 +113,10 @@ export interface DeliveryPayload {
 }
 
 export interface OwnAuthEndpointInputMap {
+  eraseUser: Omit<EraseUserInput, "sessionToken" | "request">;
+  adminEraseUser: Omit<AdministrationEraseUserInput, "actorUserId" | "request">;
+  adminGetUserErasure: UserErasureOperationInput;
+  adminResumeUserErasure: UserErasureOperationInput;
   signUpEmailPassword: { email: string; password: string; name?: string };
   signInEmailPassword: { email: string; password: string };
   getSession: undefined;
@@ -180,6 +187,10 @@ export interface OwnAuthEndpointInputMap {
 }
 
 export interface OwnAuthEndpointOutputMap {
+  eraseUser: UserErasureResult;
+  adminEraseUser: UserErasureResult;
+  adminGetUserErasure: UserErasureResult;
+  adminResumeUserErasure: UserErasureResult;
   signUpEmailPassword: AuthSessionPayload;
   signInEmailPassword: SignInPayload;
   getSession: { session: AuthSessionPayload | null };
@@ -241,10 +252,11 @@ export type OwnAuthHttpErrorCode =
   | `plugin.${string}`;
 
 export interface OwnAuthErrorPayload {
-  error: { code: OwnAuthHttpErrorCode; message: string };
+  error: { code: OwnAuthHttpErrorCode; message: string; details?: AuthError["details"] };
 }
 
 export interface OwnAuthEndpointDefinition {
+  readonly pendingResponse?: boolean;
   readonly id: OwnAuthEndpointId;
   readonly method: OwnAuthHttpMethod;
   readonly path: string;

@@ -100,6 +100,13 @@
           "href": "/docs/passkeys",
           "slug": ["passkeys"],
           "source": "docs/passkeys.md"
+        },
+        {
+          "title": "Account erasure",
+          "description": "Permanently erase an Own Auth account, resolve organisation ownership, and recover required plugin and Cloud cleanup.",
+          "href": "/docs/user-erasure",
+          "slug": ["user-erasure"],
+          "source": "docs/user-erasure.md"
         }
       ]
     },

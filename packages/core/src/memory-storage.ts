@@ -16,6 +16,9 @@ import type {
   StoragePageCursor
 } from "./storage.js";
 import { MemoryIdentityStorage } from "./memory-identity-storage.js";
+import { MemoryUserErasureStorage } from "./memory-user-erasure-storage.js";
+import { InMemoryRateLimitStore } from "./rate-limit.js";
+import { assertIdentityAuthority } from "./identity-authority.js";
 import {
   cloneStored as clone,
   findStored,
@@ -65,6 +68,7 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
   }
 
   async claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
+    assertIdentityAuthority(input.proof.expiresAt);
     const source = input.sourceUserId ? this.users.get(input.sourceUserId) : undefined;
     const proof = input.proof;
     const token = proof.kind === "token"
@@ -112,6 +116,9 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     const revokedSessions: Session[] = [];
     if (!keep && source) {
       this.users.set(source.id, { ...source, email: null, emailVerifiedAt: null, updatedAt: input.verifiedAt });
+    }
+    this.users.set(owner.id, clone(owner));
+    if (!keep && source) {
       for (const account of this.accounts.values()) {
         if (account.userId !== source.id) continue;
         if ((account.provider === "password" || account.provider === "magic_link") &&
@@ -128,7 +135,6 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
         revokedSessions.push(clone(revoked));
       }
     }
-    this.users.set(owner.id, clone(owner));
     if (input.passwordHash !== undefined && source) {
       this.passwordResetVersions.set(source.id, (this.passwordResetVersions.get(source.id) ?? 1) + 1);
     }
@@ -145,6 +151,7 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
   protected readonly members = new Map<string, OrganisationMember<string>>();
   private readonly invitations = new Map<string, Invitation<string>>();
   protected readonly auditEvents = new Map<string, AuditEvent>();
+  readonly rateLimitStore = new InMemoryRateLimitStore((userId) => this.users.has(userId));
   readonly webhookStorage = new MemoryWebhookStorage(this.auditEvents);
   readonly authorizationServerStorage = new MemoryAuthorizationServerStorage();
   readonly samlStorage = new MemorySamlStorage({
@@ -158,11 +165,23 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     members: this.members,
     auditEvents: this.auditEvents
   });
-  readonly cloudStorage = new MemoryCloudStorage({
+  readonly cloudStorage: MemoryCloudStorage = new MemoryCloudStorage({
     users: this.users,
     sessions: this.sessions,
     organisations: this.organisations,
-    members: this.members
+    members: this.members,
+    isErasureEvent: (id): Promise<boolean> => this.userErasureStorage.isCloudErasure(id)
+  });
+  readonly userErasureStorage: MemoryUserErasureStorage = new MemoryUserErasureStorage({
+    users: this.users, accounts: this.accounts, sessions: this.sessions,
+    organisations: this.organisations, members: this.members,
+    cloudOutbox: this.cloudStorage.erasureOutbox, cloudVersions: this.cloudStorage.erasureVersions,
+    webhookDeliveries: this.webhookStorage.erasureDeliveries,
+    maps: [this.users, this.sessions, this.tokens, this.smsOtps, this.apiKeys,
+      this.organisations, this.members, this.invitations, this.auditEvents, this.passwordResetVersions,
+      ...this.identityErasureMaps(), ...this.webhookStorage.erasureMaps(),
+      ...this.authorizationServerStorage.erasureMaps(), ...this.samlStorage.erasureMaps(),
+      ...this.scimStorage.erasureMaps(), ...this.cloudStorage.erasureMaps()]
   });
 
   async createUser(user: User): Promise<User> {
@@ -214,7 +233,8 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
       .map((user) => clone(user));
   }
 
-  async createUserAndAccount(user: User, account: Account): Promise<Account> {
+  async createUserAndAccount(user: User, account: Account, authorityExpiresAt?: Date): Promise<Account> {
+    assertIdentityAuthority(authorityExpiresAt);
     this.assertUserIdentityAvailable(user);
     this.users.set(user.id, clone(user));
     try {
@@ -239,7 +259,8 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     }
   }
 
-  async createSession(session: Session): Promise<Session> {
+  async createSession(session: Session, authorityExpiresAt?: Date): Promise<Session> {
+    assertIdentityAuthority(authorityExpiresAt);
     this.sessions.set(session.id, clone(session));
     return clone(session);
   }

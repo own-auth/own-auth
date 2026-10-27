@@ -15,6 +15,7 @@ import type { SamlConnection, SamlTransaction } from "../saml-types.js";
 import { accountColumns, organisationMemberColumns, userColumns } from "../database-schema.js";
 import { addInsertCte } from "./postgres-atomic.js";
 import { PostgresStorageBase } from "./postgres-storage-base.js";
+import { AuthError } from "../errors.js";
 import type { PostgresQueryable, Row } from "./postgres-types.js";
 
 export class PostgresSamlStorage extends PostgresStorageBase implements SamlStorage {
@@ -111,27 +112,28 @@ export class PostgresSamlStorage extends PostgresStorageBase implements SamlStor
     const ctes: string[] = [];
     let dependency: string | undefined;
     if (input.user) {
-      dependency = addInsertCte(ctes, params, "saml_user", "own_auth_users", userColumns, input.user);
+      dependency = addInsertCte(ctes, params, "saml_user", "own_auth_users", userColumns, input.user, undefined, input.authorityExpiresAt);
     }
     if (input.account) {
       dependency = addInsertCte(
-        ctes, params, "saml_account", "own_auth_accounts", accountColumns, input.account, dependency
+        ctes, params, "saml_account", "own_auth_accounts", accountColumns, input.account, dependency, input.authorityExpiresAt
       );
     }
     if (input.membership) {
       dependency = addInsertCte(
         ctes, params, "saml_member", "own_auth_organisation_members",
-        organisationMemberColumns, input.membership, dependency
+        organisationMemberColumns, input.membership, dependency, input.authorityExpiresAt
       );
     }
     input.auditEvents.forEach((event, index) => {
       dependency = addInsertCte(
         ctes, params, `saml_audit_${index}`, "own_auth_audit_events",
-        auditEventColumns, event, dependency
+        auditEventColumns, event, dependency, input.authorityExpiresAt
       );
     });
     if (ctes.length > 0) {
-      await this.db.query(`with ${ctes.join(", ")} select 1`, params);
+      const result = await this.db.query(`with ${ctes.join(", ")} select 1 from ${dependency}`, params);
+      if (input.authorityExpiresAt && !result.rows.length) throw new AuthError("saml_transaction_invalid", "SAML request is invalid or expired", 400);
     }
   }
 

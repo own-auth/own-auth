@@ -22,6 +22,8 @@ import { hash } from "./auth-engine-token-helpers.js";
 import { revokeAllSessionsForUser } from "./auth-engine-sessions.js";
 import { setUserDisabledState } from "./auth-engine-users.js";
 import type { AuthOperationRunner } from "./auth-operation-runner.js";
+import * as erasure from "./auth-engine-user-erasure.js";
+import type { AdministrationEraseUserInput, AdministrationUserErasureOperationInput, UserErasureResult } from "./user-erasure.js";
 
 const defaultPageLimit = 50;
 const maximumPageLimit = 100;
@@ -33,6 +35,15 @@ const administrationRateWindowMs = 60_000;
 const cursorDomain = "own-auth:administration:cursor:v1";
 
 export class OwnAuthAdministration {
+  eraseUser(input: AdministrationEraseUserInput): Promise<UserErasureResult> {
+    return this.execute("admin.eraseUser", input, () => erasure.eraseAdministrationUser(this.ctx, input));
+  }
+  getUserErasure(input: AdministrationUserErasureOperationInput): Promise<UserErasureResult> {
+    return this.execute("admin.getUserErasure", input, () => erasure.getAdministrationUserErasure(this.ctx, input));
+  }
+  resumeUserErasure(input: AdministrationUserErasureOperationInput): Promise<UserErasureResult> {
+    return this.execute("admin.resumeUserErasure", input, () => erasure.resumeAdministrationUserErasure(this.ctx, input));
+  }
   constructor(
     private readonly ctx: AuthEngineContext,
     private readonly execute: AuthOperationRunner
@@ -218,7 +229,8 @@ async function authorize(
   ctx: AuthEngineContext,
   input: { actorUserId: string; request?: { ipAddress?: string; userAgent?: string } },
   action: AdministrationAction,
-  targetUserId?: string
+  targetUserId?: string,
+  erasureContext: { operationId?: string; organisationId?: string } = {}
 ): Promise<void> {
   if (typeof input.actorUserId !== "string" || !input.actorUserId.trim()) {
     throw new AuthError("validation_error", "actorUserId is required", 400);
@@ -243,7 +255,8 @@ async function authorize(
     allowed = await ctx.administration.authorize({
       actor: Object.freeze(toAdministrationUser(actor)),
       action,
-      targetUserId
+      targetUserId,
+      ...erasureContext
     });
   } catch {
     allowed = false;
@@ -252,6 +265,8 @@ async function authorize(
     throw new AuthError("permission_denied", "Administration access denied", 403);
   }
 }
+
+export { authorize as authorizeAdministration };
 
 function toAdministrationUser(user: User): AdministrationUser {
   return {

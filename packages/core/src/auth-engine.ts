@@ -122,6 +122,8 @@ import type {
 import { OwnAuthCloud } from "./cloud-api.js";
 import { resolveCloudOperationUserId } from "./cloud-operation-context.js";
 import type { CloudCommandPayload } from "./cloud-types.js";
+import * as userErasure from "./auth-engine-user-erasure.js";
+import type { EraseUserInput, UserErasureOperationInput, UserErasureResult } from "./user-erasure.js";
 export type { OwnAuthOptions } from "./auth-engine-types.js";
 export class OwnAuth<CustomRole extends string = never, CustomPermission extends string = never> {
   readonly storage: AuthStorage;
@@ -146,6 +148,7 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
       () => this as unknown as OwnAuth<string, string>,
       options.pluginRuntime
     );
+    this.ctx.erasurePlugins = this.pluginRuntime.definitions;
     this.admin = new OwnAuthAdministration(this.ctx, this.executeCore);
     this.authorizationServer = new OwnAuthAuthorizationServer(this.ctx, this.executeCore);
     this.saml = new OwnAuthSaml(this.ctx, this.executeCore);
@@ -246,6 +249,17 @@ export class OwnAuth<CustomRole extends string = never, CustomPermission extends
   }
   createUser(input: CreateUserInput): Promise<User> {
     return this.executeCore("createUser", input, () => users.createUser(this.ctx, input));
+  }
+  eraseUser(input: EraseUserInput): Promise<UserErasureResult> {
+    return this.executeCore("eraseUser", input, () => userErasure.eraseUser(this.ctx, input));
+  }
+  /** Trusted server operation. Never expose it through an unauthenticated route. */
+  getUserErasure(input: UserErasureOperationInput): Promise<UserErasureResult> {
+    return this.runWhileOpen(() => userErasure.getUserErasure(this.ctx, input));
+  }
+  /** Trusted server operation. Never expose it through an unauthenticated route. */
+  resumeUserErasure(input: UserErasureOperationInput): Promise<UserErasureResult> {
+    return this.runWhileOpen(() => userErasure.resumeUserErasure(this.ctx, input));
   }
   signUpEmailPassword(input: SignUpEmailPasswordInput): Promise<SessionResult> {
     return this.executeCore("signUpEmailPassword", input, () =>

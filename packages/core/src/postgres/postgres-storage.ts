@@ -81,8 +81,12 @@ import { PostgresSamlStorage } from "./postgres-saml-storage.js";
 import { PostgresScimStorage } from "./postgres-scim-storage.js";
 import { PostgresCloudStorage } from "./postgres-cloud-storage.js";
 import { claimPostgresEmailOwnership } from "./postgres-email-ownership.js";
+import { PostgresUserErasureStorage } from "./postgres-user-erasure-storage.js";
+import { PostgresRateLimitStore } from "./postgres-rate-limit-store.js";
 
 export class PostgresAuthStorage extends PostgresIdentityStorage implements AuthStorage {
+  readonly userErasureStorage = new PostgresUserErasureStorage(this.db);
+  readonly rateLimitStore = new PostgresRateLimitStore(this.db);
   claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
     return withPostgresIdentityErrors(() => claimPostgresEmailOwnership(this.db, input));
   }
@@ -126,18 +130,19 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
     return rows.map(mapUser);
   }
 
-  async createAccount(account: Account): Promise<Account> {
+  async createAccount(account: Account, authorityExpiresAt?: Date): Promise<Account> {
     return withPostgresIdentityErrors(async () =>
       mapAccount(await this.insertOne(
         "own_auth_accounts",
         accountColumns,
         account,
-        accountReturning
+        accountReturning,
+        authorityExpiresAt
       ))
     );
   }
 
-  async createUserAndAccount(user: User, account: Account): Promise<Account> {
+  async createUserAndAccount(user: User, account: Account, authorityExpiresAt?: Date): Promise<Account> {
     return withPostgresIdentityErrors(async () => {
       const userEntries = databaseColumnEntries(userColumns, user);
       const accountEntries = databaseColumnEntries(accountColumns, account);
@@ -150,10 +155,11 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
       const accountPlaceholders = accountEntries.map(
         (_, index) => `$${accountOffset + index + 1}`
       );
+      const authority = authorityExpiresAt ? (values.push(authorityExpiresAt), `where clock_timestamp() < $${values.length}::timestamptz`) : "";
       const result = await this.db.query<Record<string, unknown>>(
         `with inserted_user as (
            insert into own_auth_users (${userEntries.map(([, column]) => column).join(", ")})
-           values (${userPlaceholders.join(", ")}) returning id
+           select ${userPlaceholders.join(", ")} ${authority} returning id
          )
          insert into own_auth_accounts (${accountEntries.map(([, column]) => column).join(", ")})
          select ${accountPlaceholders.join(", ")} from inserted_user
@@ -195,8 +201,8 @@ export class PostgresAuthStorage extends PostgresIdentityStorage implements Auth
     return result.rows.length > 0;
   }
 
-  async createSession(session: Session): Promise<Session> {
-    const row = await this.insertOne("own_auth_sessions", sessionColumns, session, sessionReturning);
+  async createSession(session: Session, authorityExpiresAt?: Date): Promise<Session> {
+    const row = await this.insertOne("own_auth_sessions", sessionColumns, session, sessionReturning, authorityExpiresAt);
     return mapSession(row);
   }
 

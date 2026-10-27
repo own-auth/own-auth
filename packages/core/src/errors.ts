@@ -28,6 +28,12 @@ export type AuthErrorCode =
   | "invitation_not_found"
   | "invitation_not_pending"
   | "user_not_found"
+  | "reauthentication_required"
+  | "user_erasure_unsupported"
+  | "user_erasure_ownership_required"
+  | "erasure_operation_conflict"
+  | "erasure_operation_closed"
+  | "erasure_operation_not_found"
   | "account_linking_required"
   | "oauth_account_conflict"
   | "oauth_verified_email_required"
@@ -89,7 +95,8 @@ export class AuthError extends Error {
   readonly statusCode: number;
   readonly safeMessage: string;
 
-  constructor(code: AuthErrorCode, safeMessage: string, statusCode = 400) {
+  constructor(code: AuthErrorCode, safeMessage: string, statusCode = 400,
+    readonly details?: Readonly<{ organisationIds?: readonly string[]; stores?: readonly string[] }>) {
     super(safeMessage);
     Object.defineProperty(this, authErrorBrand, { value: true });
     this.name = "AuthError";

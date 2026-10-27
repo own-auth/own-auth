@@ -22,6 +22,7 @@ export async function verifyPairedSamlEmail(
     verifiedAccountId: string;
     request?: RequestContext;
     originalActorUserId?: string;
+    authorityExpiresAt?: Date;
   }
 ): Promise<User> {
   const { samlConnectionId, resource, user, normalizedEmail, verifiedAccountId, request, originalActorUserId } = input;
@@ -35,7 +36,7 @@ export async function verifyPairedSamlEmail(
   return claimEmailOwnership(ctx, {
     user,
     email: normalizedEmail,
-    proof: { kind: "provider", originalActorUserId, samlOrganisationId: connection.organisationId },
+    proof: { kind: "provider", originalActorUserId, samlOrganisationId: connection.organisationId, expiresAt: input.authorityExpiresAt },
     verifiedAccountId,
     request,
     metadata: { method: "saml", samlConnectionId, scimConnectionId: connection.id }

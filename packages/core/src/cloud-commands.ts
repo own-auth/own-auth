@@ -63,6 +63,9 @@ export class CloudCommandHandler {
     if (!valid) return { status: 401, body: { error: "Cloud command signature is invalid" } };
 
     const payload = parseCommand(body);
+    if (!await auth.storage.getUserById(payload.userId)) {
+      return { status: 404, body: { error: "User not found" } };
+    }
     const now = new Date();
     const reservation = await this.storage.reserveCloudCommand({
       idempotencyKey,

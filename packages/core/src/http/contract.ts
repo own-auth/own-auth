@@ -18,6 +18,7 @@ import type {
 } from "./contract-types.js";
 import { externalAccountProviders } from "../oauth-types.js";
 import { cloneAndDeepFreeze } from "../immutable-config.js";
+import { userErasureEndpoints } from "./user-erasure-contract.js";
 import { organisationRolePattern } from "../authorization.js";
 
 export * from "./contract-schemas.js";
@@ -143,6 +144,7 @@ type OwnAuthEndpointMap = {
 };
 
 const ownAuthEndpointSpecs = {
+  ...userErasureEndpoints,
   signUpEmailPassword: endpoint("POST", "/sign-up/email", "Create a user with an email and password", {
     request: objectSchema(
       { email: emailSchema, password: stringSchema(), name: stringSchema() },

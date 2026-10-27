@@ -1,6 +1,7 @@
 import type { OwnAuth } from "../auth-engine.js";
 import { AuthError } from "../errors.js";
 import type { RequestContext } from "../types.js";
+import type { UserErasureResult } from "../user-erasure.js";
 import type {
   MfaRequiredResult,
   OAuthCompletionResult,
@@ -29,6 +30,7 @@ import {
 } from "./serializers.js";
 
 export interface EndpointExecution<Body = unknown> {
+  status?: 200 | 202;
   body: Body;
   setOAuthBrowser?: { state: string; token: string; expiresAt: Date };
   setSession?: { token: string; expiresAt: Date };
@@ -61,6 +63,24 @@ type EndpointExecutorMap = {
 };
 
 const endpointExecutors = {
+  eraseUser: async ({ auth, sessionToken, request }, input) => {
+    const body = await auth.eraseUser({ ...input, sessionToken: requireToken(sessionToken, "session"), request });
+    return { ...userErasureExecution(body), clearSession: true, clearMfaChallenge: true };
+  },
+  adminEraseUser: async (context, input) => {
+    const authorized = await administrationInput(context, input);
+    const body = await context.auth.admin.eraseUser(authorized);
+    return { ...userErasureExecution(body),
+      ...(authorized.actorUserId === input.userId ? { clearSession: true, clearMfaChallenge: true } : {}) };
+  },
+  adminGetUserErasure: async (context, input) => {
+    const body = await context.auth.admin.getUserErasure(await administrationInput(context, input));
+    return userErasureExecution(body);
+  },
+  adminResumeUserErasure: async (context, input) => {
+    const body = await context.auth.admin.resumeUserErasure(await administrationInput(context, input));
+    return userErasureExecution(body);
+  },
   signUpEmailPassword: async ({ auth, request }, input) =>
     signInExecution(await auth.signUpEmailPassword({ ...input, request })),
 
@@ -405,6 +425,10 @@ export function executeEndpoint<Id extends OwnAuthEndpointId>(
     { auth, sessionToken, mfaChallengeToken, request, oauthBrowserToken },
     rawInput as unknown as OwnAuthEndpointInputMap[Id]
   );
+}
+
+function userErasureExecution(body: UserErasureResult): EndpointExecution<UserErasureResult> {
+  return { body, status: body.status === "pending" ? 202 : 200 };
 }
 
 function signInExecution(result: SessionResult): EndpointExecution<AuthSessionPayload>;

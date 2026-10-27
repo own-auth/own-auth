@@ -19,6 +19,7 @@ export interface ConsumeSamlResponseInput {
 }
 
 export interface SamlIdentityCommit {
+  authorityExpiresAt?: Date;
   user?: User;
   account?: Account;
   membership?: OrganisationMember<string>;

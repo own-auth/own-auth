@@ -81,6 +81,12 @@ export function validatePlugin(plugin: OwnAuthPluginDefinition): void {
   if (typeof plugin.version !== "string" || !plugin.version.trim() || plugin.version.length > 128) {
     throw new Error(`Plugin ${plugin.id} must have a non-empty version`);
   }
+  if (plugin.userErasure !== undefined && (
+    !plugin.userErasure || typeof plugin.userErasure.personalData !== "boolean" ||
+    (plugin.userErasure.personalData && typeof plugin.userErasure.erase !== "function")
+  )) {
+    throw new Error(`Plugin ${plugin.id} must declare valid user erasure support`);
+  }
   assertUniqueMembers(plugin, "server method", Object.keys(plugin.serverMethods ?? {}));
   assertUniqueMembers(plugin, "client method", Object.keys(plugin.clientMethods ?? {}));
   assertUniqueIdentifiers(plugin, "error", plugin.errors ?? []);

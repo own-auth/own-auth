@@ -11,6 +11,7 @@ import type { SamlConnection, SamlTransaction } from "../saml-types.js";
 import type { DatabaseRow } from "../database-types.js";
 import { D1StorageBase } from "./d1-storage-base.js";
 import type { D1DatabaseLike } from "./d1-types.js";
+import { AuthError } from "../errors.js";
 
 export class D1SamlStorage extends D1StorageBase implements SamlStorage {
   constructor(db: D1DatabaseLike) { super(db); }
@@ -103,20 +104,25 @@ export class D1SamlStorage extends D1StorageBase implements SamlStorage {
   async commitIdentity(input: SamlIdentityCommit): Promise<void> {
     const statements = [];
     if (input.user) {
-      statements.push(this.insertStatement("own_auth_users", userColumns, input.user, "id"));
+      statements.push(this.insertStatement("own_auth_users", userColumns, input.user, "id", input.authorityExpiresAt));
     }
     if (input.account) {
-      statements.push(this.insertStatement("own_auth_accounts", accountColumns, input.account, "id"));
+      statements.push(this.insertStatement("own_auth_accounts", accountColumns, input.account, "id", input.authorityExpiresAt));
     }
     if (input.membership) {
       statements.push(this.insertStatement(
-        "own_auth_organisation_members", organisationMemberColumns, input.membership, "id"
+        "own_auth_organisation_members", organisationMemberColumns, input.membership, "id", input.authorityExpiresAt
       ));
     }
     for (const event of input.auditEvents) {
-      statements.push(this.insertStatement("own_auth_audit_events", auditEventColumns, event, "id"));
+      statements.push(this.insertStatement("own_auth_audit_events", auditEventColumns, event, "id", input.authorityExpiresAt));
     }
-    if (statements.length > 0) await this.db.batch(statements);
+    if (statements.length > 0) {
+      const results = await this.db.batch(statements);
+      if (input.authorityExpiresAt && !results[0]?.results?.length) {
+        throw new AuthError("saml_transaction_invalid", "SAML request is invalid or expired", 400);
+      }
+    }
   }
 
   async cleanup(expiredBefore: Date): Promise<{ transactions: number; assertions: number }> {

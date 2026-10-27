@@ -133,6 +133,7 @@
     "./migrations/017_atomic_auth_operations.sql": "./migrations/017_atomic_auth_operations.sql",
     "./migrations/018_cloud.sql": "./migrations/018_cloud.sql",
     "./migrations/019_password_reset_version.sql": "./migrations/019_password_reset_version.sql",
+    "./migrations/020_user_erasure.sql": "./migrations/020_user_erasure.sql",
     "./migrations/d1/*.sql": "./migrations/d1/*.sql",
     "./docs/installation.md": "./docs/installation.md",
     "./docs/cloudflare-d1.md": "./docs/cloudflare-d1.md",
@@ -140,14 +141,15 @@
     "./docs/saml.md": "./docs/saml.md",
     "./docs/scim.md": "./docs/scim.md",
     "./docs/device-authorization.md": "./docs/device-authorization.md",
-    "./docs/security-model.md": "./docs/security-model.md"
+    "./docs/security-model.md": "./docs/security-model.md",
+    "./docs/user-erasure.md": "./docs/user-erasure.md"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "pack:check": "npm pack --dry-run",
     "test": "vitest run",
-    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts",
-    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts",
+    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
+    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/types/tsconfig.json"
   },
   "dependencies": {

@@ -28,7 +28,8 @@ describeWithDatabase("Postgres Cloud integration", () => {
         new PostgresAuthStorage(first).cloudStorage,
         new PostgresAuthStorage(second).cloudStorage
       ] as const;
-      const entity = { type: "user", id: `usr_cloud_${crypto.randomUUID()}` } as const;
+      const user = await createOwnAuth({ storage: new PostgresAuthStorage(first) }).createUser({ email: `versions-${crypto.randomUUID()}@example.com` });
+      const entity = { type: "user", id: user.id } as const;
       const events = [0, 1].map(() => createCloudEvent("app_cloud", {
         type: "user.updated",
         data: { userId: entity.id, email: "user@example.com", authMethods: ["email"] },
@@ -56,7 +57,8 @@ describeWithDatabase("Postgres Cloud integration", () => {
         new PostgresAuthStorage(second).cloudStorage
       ] as const;
       await stores[0].clearCloudOutbox(true);
-      const entity = { type: "user", id: `usr_capacity_${crypto.randomUUID()}` } as const;
+      const user = await createOwnAuth({ storage: new PostgresAuthStorage(first) }).createUser({ email: `capacity-${crypto.randomUUID()}@example.com` });
+      const entity = { type: "user", id: user.id } as const;
       const events = [0, 1].map(() => createCloudEvent("app_cloud", {
         type: "user.updated",
         data: { userId: entity.id, email: "user@example.com", authMethods: ["magic_link"] },

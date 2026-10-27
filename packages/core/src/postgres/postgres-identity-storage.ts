@@ -250,13 +250,14 @@ export class PostgresIdentityStorage extends PostgresStorageBase {
     return result.rows[0] ? mapRecoveryCode(result.rows[0]) : null;
   }
 
-  async createMfaChallenge(challenge: MfaChallenge): Promise<MfaChallenge> {
+  async createMfaChallenge(challenge: MfaChallenge, authorityExpiresAt?: Date): Promise<MfaChallenge> {
     return mapMfaChallenge(
       await this.insertOne(
         "own_auth_mfa_challenges",
         mfaChallengeColumns,
         challenge,
-        mfaChallengeReturning
+        mfaChallengeReturning,
+        authorityExpiresAt
       )
     );
   }

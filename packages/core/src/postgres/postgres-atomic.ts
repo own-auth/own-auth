@@ -8,7 +8,8 @@ export function addInsertCte<Entity>(
   table: string,
   columns: EntityColumnMap<Entity>,
   entity: Entity,
-  dependency?: string
+  dependency?: string,
+  authorityExpiresAt?: Date
 ): string {
   const entries = databaseColumnEntries(columns, entity);
   const placeholders = entries.map(([key]) => {
@@ -17,10 +18,12 @@ export function addInsertCte<Entity>(
   });
   const source = dependency
     ? `select ${placeholders.join(", ")} from ${dependency}`
-    : `values (${placeholders.join(", ")})`;
+    : `select ${placeholders.join(", ")}`;
+  const authority = authorityExpiresAt
+    ? (params.push(authorityExpiresAt), ` where clock_timestamp() < $${params.length}::timestamptz`) : "";
   ctes.push(
     `${name} as (insert into ${table} (${entries.map(([, column]) => column).join(", ")}) ` +
-    `${source} returning id)`
+    `${source}${authority} returning id)`
   );
   return name;
 }

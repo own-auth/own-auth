@@ -26,33 +26,37 @@ import {
   type AuthEngineContext
 } from "./auth-engine-internals.js";
 import { requireCurrentSession } from "./auth-engine-sessions.js";
+import { assertIdentityAuthority } from "./identity-authority.js";
 
 const totpPeriodSeconds = 30;
 const totpDigits = 6;
 const totpWindow = 1;
 const recoveryCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+export async function getMfaMethods(ctx: AuthEngineContext, userId: string): Promise<MfaMethod[]> {
+  const [totp, passkeys] = await Promise.all([
+    ctx.storage.getActiveTotpFactorByUserId(userId),
+    ctx.storage.listPasskeyCredentialsByUserId(userId)
+  ]);
+  const methods: MfaMethod[] = [];
+  if (totp) methods.push("totp", "recovery_code");
+  if (passkeys.length) methods.push("passkey");
+  return methods;
+}
+
 export async function completeFirstFactor(
   ctx: AuthEngineContext,
   user: User,
   method: string,
-  request?: RequestContext
+  request?: RequestContext,
+  authorityExpiresAt?: Date
 ): Promise<SignInResult> {
   const activeUser = await requireActiveUser(ctx, user.id);
-  const [totp, passkeys] = await Promise.all([
-    ctx.storage.getActiveTotpFactorByUserId(activeUser.id),
-    ctx.storage.listPasskeyCredentialsByUserId(activeUser.id)
-  ]);
-  const methods: MfaMethod[] = [];
-  if (totp) {
-    methods.push("totp", "recovery_code");
-  }
-  if (passkeys.length > 0) {
-    methods.push("passkey");
-  }
+  const methods = await getMfaMethods(ctx, activeUser.id);
+  assertIdentityAuthority(authorityExpiresAt);
   if (methods.length === 0) {
     const authenticatedUser = await markUserLoggedIn(ctx, activeUser);
-    const result = await createSession(ctx, authenticatedUser, request, [method], "aal1");
+    const result = await createSession(ctx, authenticatedUser, request, [method], "aal1", authorityExpiresAt);
     await auditSignedIn(ctx, authenticatedUser.id, method, request, "aal1");
     return result;
   }
@@ -71,7 +75,7 @@ export async function completeFirstFactor(
     expiresAt,
     consumedAt: null,
     createdAt: now
-  });
+  }, authorityExpiresAt);
   return { status: "mfa_required", challengeToken, methods, expiresAt };
 }
 

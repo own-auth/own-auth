@@ -164,7 +164,7 @@ export function mapInvitation(row: Row): Invitation<string> {
     email: nullableString(row.email),
     phone: nullableString(row.phone),
     role: stringValue(row.role),
-    invitedByUserId: stringValue(row.invited_by_user_id),
+    invitedByUserId: nullableString(row.invited_by_user_id),
     status: stringValue(row.status) as InvitationStatus,
     expiresAt: dateValue(row.expires_at),
     acceptedAt: nullableDate(row.accepted_at),

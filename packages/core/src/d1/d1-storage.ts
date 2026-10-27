@@ -81,8 +81,12 @@ import { D1SamlStorage } from "./d1-saml-storage.js";
 import { D1ScimStorage } from "./d1-scim-storage.js";
 import { D1CloudStorage } from "./d1-cloud-storage.js";
 import { claimD1EmailOwnership } from "./d1-email-ownership.js";
+import { D1UserErasureStorage } from "./d1-user-erasure-storage.js";
+import { D1RateLimitStore } from "./d1-rate-limit-store.js";
 
 export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
+  readonly userErasureStorage = new D1UserErasureStorage(this.db);
+  readonly rateLimitStore = new D1RateLimitStore(this.db);
   async claimEmailOwnershipAtomically(input: AtomicEmailOwnershipInput): Promise<AtomicEmailOwnershipResult | null> {
     try {
       return await claimD1EmailOwnership(this.db, input);
@@ -136,23 +140,24 @@ export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
     return rows.map(mapUser);
   }
 
-  async createAccount(account: Account): Promise<Account> {
+  async createAccount(account: Account, authorityExpiresAt?: Date): Promise<Account> {
     try {
       return mapAccount(await this.insertOne(
         "own_auth_accounts",
         accountColumns,
         account,
-        accountReturning
+        accountReturning,
+        authorityExpiresAt
       ));
     } catch (error) {
       rethrowD1IdentityError(error);
     }
   }
 
-  async createUserAndAccount(user: User, account: Account): Promise<Account> {
+  async createUserAndAccount(user: User, account: Account, authorityExpiresAt?: Date): Promise<Account> {
     try {
       const results = await this.db.batch<DatabaseRow>([
-        this.insertStatement("own_auth_users", userColumns, user, userReturning),
+        this.insertStatement("own_auth_users", userColumns, user, userReturning, authorityExpiresAt),
         this.insertStatement("own_auth_accounts", accountColumns, account, accountReturning)
       ]);
       const row = results[1]?.results?.[0];
@@ -189,12 +194,13 @@ export class D1AuthStorage extends D1IdentityStorage implements AuthStorage {
     ).first<DatabaseRow>());
   }
 
-  async createSession(session: Session): Promise<Session> {
+  async createSession(session: Session, authorityExpiresAt?: Date): Promise<Session> {
     return mapSession(await this.insertOne(
       "own_auth_sessions",
       sessionColumns,
       session,
-      sessionReturning
+      sessionReturning,
+      authorityExpiresAt
     ));
   }
 

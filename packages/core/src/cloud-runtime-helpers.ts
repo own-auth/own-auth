@@ -2,6 +2,8 @@ import { AuthError } from "./errors.js";
 import type { CloudSecurityDecision } from "./cloud-types.js";
 import { isRecord } from "./value-guards.js";
 
+export const maximumCloudSecurityCacheAgeMs = 5 * 60_000;
+
 export const cloudSignInOperations = new Set([
   "signInEmailPassword",
   "verifyMagicLink",

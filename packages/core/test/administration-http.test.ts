@@ -9,6 +9,26 @@ import {
 import { jsonRequest } from "./http-test-helpers.js";
 
 describe("administration HTTP endpoints", () => {
+  it("reads and resumes complete erasures and returns typed missing target and operation errors", async () => {
+    const { auth, handler } = createAdministrationHttpAuth();
+    const actor = await auth.signUpEmailPassword({ email: "erasure-admin@example.com", password: "correct-horse" });
+    const target = await auth.createUser({ email: "erasure-target@example.com" });
+    const headers = { authorization: `Bearer ${actor.sessionToken}` };
+    const operationId = crypto.randomUUID();
+    expect((await handler(jsonRequest("/api/auth/admin/user/erase", { userId: target.id, reason: "requested", operationId }, headers))).status).toBe(200);
+    const status = await handler(new Request(`http://localhost/api/auth/admin/user-erasure?operationId=${operationId}`, { headers }));
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ operationId, status: "complete" });
+    const resumed = await handler(jsonRequest("/api/auth/admin/user-erasure/resume", { operationId }, headers));
+    expect(resumed.status).toBe(200);
+    expect(await resumed.json()).toMatchObject({ operationId, status: "complete" });
+    const missing = await handler(new Request(`http://localhost/api/auth/admin/user-erasure?operationId=${crypto.randomUUID()}`, { headers }));
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "erasure_operation_not_found" } });
+    const missingUser = await handler(jsonRequest("/api/auth/admin/user/erase", { userId: "missing", reason: "requested", operationId: crypto.randomUUID() }, headers));
+    expect(missingUser.status).toBe(404);
+    expect(await missingUser.json()).toMatchObject({ error: { code: "user_not_found" } });
+  });
   it("returns 404 when administration is not configured", async () => {
     const auth = createOwnAuth({
       storage: new InMemoryAuthStorage(),

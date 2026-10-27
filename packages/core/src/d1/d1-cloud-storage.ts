@@ -132,7 +132,7 @@ export class D1CloudStorage extends D1StorageBase implements CloudStorage {
 
   async clearCloudOutbox(includePriority: boolean): Promise<number> {
     const result = await this.prepare(
-      `delete from own_auth_cloud_outbox ${includePriority ? "" : "where priority = 0"} returning id`
+      `delete from own_auth_cloud_outbox where ${includePriority ? "1" : "priority = 0"} and not ${pendingErasureCloudEventSql("d1")} returning id`
     ).all<DatabaseRow>();
     return result.results?.length ?? 0;
   }
@@ -140,7 +140,7 @@ export class D1CloudStorage extends D1StorageBase implements CloudStorage {
   async purgeCloudOutboxForUser(userId: string, email?: string | null): Promise<number> {
     const result = await this.prepare(
       `delete from own_auth_cloud_outbox
-       where ack_at is null and (
+       where ack_at is null and not ${pendingErasureCloudEventSql("d1")} and (
          json_extract(payload, '$.data.userId') = ?1 or
          json_extract(payload, '$.data.actorId') = ?1 or
          (json_extract(payload, '$.data.targetType') = 'user' and
@@ -402,3 +402,4 @@ function assertBatch(results: { success?: boolean; error?: string }[]): void {
 function isD1UniqueError(error: unknown): boolean {
   return error instanceof Error && /unique constraint|constraint failed/i.test(error.message);
 }
+import { pendingErasureCloudEventSql } from "../user-erasure-sql-match.js";

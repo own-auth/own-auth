@@ -66,7 +66,14 @@ export function createOwnAuthOpenApiDocument(
               additionalProperties: false,
               properties: {
                 code: { type: "string" },
-                message: { type: "string" }
+                message: { type: "string" },
+                details: {
+                  type: "object", additionalProperties: false,
+                  properties: {
+                    organisationIds: { type: "array", items: { type: "string" } },
+                    stores: { type: "array", items: { type: "string" } }
+                  }
+                }
               }
             }
           }
@@ -169,6 +176,10 @@ function responsesFor(endpoint: OwnAuthEndpointDefinition): Record<string, unkno
   };
 
   const statuses = errorStatusesFor(endpoint.errors);
+  if (endpoint.pendingResponse) responses["202"] = {
+    description: "Authentication records deleted; remaining Own Auth cleanup is pending",
+    content: { "application/json": { schema: endpoint.response } }
+  };
   statuses.add(400);
   statuses.add(403);
   statuses.add(500);
@@ -252,6 +263,10 @@ function statusForError(code: OwnAuthHttpErrorCode): number {
   if (code === "rate_limited" || code === "otp_attempts_exceeded") return 429;
   if (
     code === "email_already_exists" ||
+    code === "user_erasure_unsupported" ||
+    code === "user_erasure_ownership_required" ||
+    code === "erasure_operation_conflict" ||
+    code === "erasure_operation_closed" ||
     code === "phone_already_exists" ||
     code === "invite_exists" ||
     code === "already_member" ||
@@ -271,6 +286,7 @@ function statusForError(code: OwnAuthHttpErrorCode): number {
   ) return 403;
   if (
     code === "user_not_found" ||
+    code === "erasure_operation_not_found" ||
     code === "organisation_not_found" ||
     code === "member_not_found" ||
     code === "invitation_not_found" ||
@@ -279,6 +295,7 @@ function statusForError(code: OwnAuthHttpErrorCode): number {
   ) return 404;
   if (
     code === "invalid_credentials" ||
+    code === "reauthentication_required" ||
     code === "invalid_session" ||
     code === "invalid_token" ||
     code === "expired_token" ||

@@ -3,6 +3,7 @@ import type { DatabaseDialect } from "./core-migrations.js";
 import type { JsonSchema, OwnAuthHttpMethod } from "./http/contract.js";
 import type { AuthStorage } from "./storage.js";
 import type { CurrentSession, JsonRecord, RequestContext } from "./types.js";
+import type { UserErasureParticipation } from "./user-erasure.js";
 
 export type PluginSessionRequirement = "none" | "optional" | "required";
 
@@ -81,6 +82,7 @@ export interface OwnAuthPluginMigration {
 }
 
 export interface OwnAuthPluginDefinition {
+  userErasure?: UserErasureParticipation;
   id: string;
   version: string;
   serverMethods?: Readonly<Record<string, OwnAuthPluginServerMethod>>;

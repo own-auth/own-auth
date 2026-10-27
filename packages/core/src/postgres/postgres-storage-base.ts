@@ -1,22 +1,28 @@
 import { databaseColumnEntries } from "../database-types.js";
 import { expectOne, toPostgresValue } from "./postgres-row.js";
 import type { ColumnMap, PostgresQueryable, Row } from "./postgres-types.js";
+import { transactionQueryable } from "./postgres-transactions.js";
 
 export class PostgresStorageBase {
-  constructor(protected readonly db: PostgresQueryable) {}
+  protected readonly db: PostgresQueryable;
+  constructor(db: PostgresQueryable) { this.db = transactionQueryable(db); }
 
   protected async insertOne<Entity extends { id: string }>(
     table: string,
     columns: ColumnMap<Entity>,
     entity: Entity,
-    returning: string
+    returning: string,
+    authorityExpiresAt?: Date
   ): Promise<Row> {
     const entries = databaseColumnEntries(columns, entity);
     const columnNames = entries.map(([, column]) => column);
     const params = entries.map(([key]) => toPostgresValue(entity[key]));
     const placeholders = params.map((_, index) => `$${index + 1}`);
+    const source = authorityExpiresAt
+      ? (params.push(authorityExpiresAt), `select ${placeholders.join(", ")} where clock_timestamp() < $${params.length}::timestamptz`)
+      : `values (${placeholders.join(", ")})`;
     const result = await this.db.query<Row>(
-      `insert into ${table} (${columnNames.join(", ")}) values (${placeholders.join(", ")}) returning ${returning}`,
+      `insert into ${table} (${columnNames.join(", ")}) ${source} returning ${returning}`,
       params
     );
     return expectOne(result.rows);

@@ -1,5 +1,6 @@
 import { createId } from "./crypto.js";
 import { AuthError } from "./errors.js";
+import { isUserErasureCapableStorage } from "./user-erasure.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { traceWebhookDelivery } from "./telemetry.js";
 import {
@@ -134,9 +135,10 @@ async function deliverClaimed(
     claimed.event.type,
     attemptInCycle,
     () => endpoint
-      ? sendWebhook(ctx, claimed, endpoint.secret, attemptInCycle, startedAt)
+      ? sendWebhook(ctx, claimed, endpoint.secret, attemptInCycle, startedAt, leaseToken)
       : Promise.resolve(permanentFailure(startedAt, "endpoint_not_configured"))
   );
+  if (!decision) return "lease_lost";
   const attemptNumber = claimed.delivery.totalAttempts + 1;
   const settled = await storage.settleWebhookDelivery({
     deliveryId: claimed.delivery.id,
@@ -164,8 +166,9 @@ async function sendWebhook(
   claimed: ClaimedWebhookDelivery,
   secret: string,
   attemptInCycle: number,
-  startedAt: Date
-): Promise<AttemptDecision> {
+  startedAt: Date,
+  leaseToken: string
+): Promise<AttemptDecision | null> {
   const timestamp = Math.floor(startedAt.getTime() / 1_000).toString();
   const signature = await createWebhookSignature({
     body: claimed.event.payload,
@@ -173,6 +176,7 @@ async function sendWebhook(
     timestamp,
     secret
   });
+  if (isUserErasureCapableStorage(ctx.storage) && !await ctx.storage.userErasureStorage.authorizeWebhookSend(claimed.delivery.id, leaseToken)) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 

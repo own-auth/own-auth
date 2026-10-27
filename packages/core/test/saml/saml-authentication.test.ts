@@ -4,6 +4,21 @@ import { SamlProtocolError } from "../../src/saml.js";
 import { createSamlHarness, required } from "./saml-test-harness.js";
 
 describe("SAML authentication", () => {
+  it("rejects a provider response when verification outlives the initiating request", async () => {
+    const harness = await createSamlHarness();
+    const started = await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
+    const verify = harness.provider.verifyResponse.bind(harness.provider);
+    vi.spyOn(harness.provider, "verifyResponse").mockImplementationOnce(async (input) => {
+      const assertion = await verify(input);
+      vi.useFakeTimers();
+      vi.setSystemTime(started.expiresAt.getTime() + 1);
+      return assertion;
+    });
+    try {
+      await expect(harness.complete()).rejects.toMatchObject({ code: "saml_transaction_invalid" });
+      expect(await harness.storage.getUserByEmail(harness.provider.email)).toBeNull();
+    } finally { vi.useRealTimers(); vi.restoreAllMocks(); }
+  });
   it("manages immutable organisation connections through owners", async () => {
     const harness = await createSamlHarness();
 

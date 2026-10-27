@@ -92,18 +92,18 @@ export const cloudEventContract = {
     }, { meta: userMeta, requiredMeta: requiredUserMeta }),
     "org.updated": event("org", {
       orgId: field("string", true),
-      name: field("string", true)
-    }, { meta: userMeta, requiredMeta: requiredUserMeta }),
+      name: field("string", true),
+      ownerId: field("string", false)
+    }, { meta: userMeta }),
     "org.deleted": event("org", { orgId: field("string", true) }, {
       meta: userMeta,
-      requiredMeta: requiredUserMeta,
       priority: true
     }),
     "org.member.added": event("org", {
       orgId: field("string", true),
       userId: field("string", true),
       role: field("string", true)
-    }, { meta: userMeta, requiredMeta: requiredUserMeta }),
+    }, { meta: userMeta }),
     "org.member.removed": event("org", {
       orgId: field("string", true),
       userId: field("string", true)

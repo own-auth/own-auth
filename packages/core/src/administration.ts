@@ -12,6 +12,10 @@ export const administrationActions = [
   "users:read",
   "users:disable",
   "users:enable",
+  "users:erase",
+  "erasures:read",
+  "erasures:resume",
+  "organisations:resolve-erasure",
   "sessions:list",
   "sessions:revoke",
   "audit:list"
@@ -63,6 +67,8 @@ export interface AdministrationPage<Item> {
 }
 
 export interface AdministrationAuthorizationContext {
+  operationId?: string;
+  organisationId?: string;
   actor: Readonly<AdministrationUser>;
   action: AdministrationAction;
   targetUserId: string | undefined;

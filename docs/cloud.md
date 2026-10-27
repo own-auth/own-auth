@@ -114,6 +114,10 @@ Backfill is paginated, resumable, cancellable through an `AbortSignal`, and idem
 
 Call `auth.cloud.eraseUser(userId)` when an application user is permanently deleted. Own Auth removes pending local events linked through the user, actor, a user-type audit target, delivery recipient, invitation recipient, or metadata before writing the priority deletion event. Cloud then removes that user's replicas, ingested events, remote commands, delivery records, audit and security records, analytics membership, and pending exports.
 
+For complete Own Auth account deletion, use [`auth.eraseUser`](./user-erasure.md). It erases local authentication records and coordinates Cloud automatically when configured. The Cloud specific operation leaves local login credentials and sessions unchanged.
+
+After confirmed Cloud erasure, the approved deletion protection record retains only an application scoped keyed digest of the old user ID, deletion version, and deletion time. This retained identifier prevents delayed events and restored data from recreating the account. Restore recovery uses the same record. It contains no contact details, profile, authentication secret, personal audit body, or reason.
+
 ```ts
 await auth.cloud.eraseUser(userId);
 ```

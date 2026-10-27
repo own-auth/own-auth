@@ -17,6 +17,42 @@ const webhookSecret = "webhook-test-secret-that-is-at-least-32-bytes";
 const rotatedSecret = "rotated-webhook-secret-that-is-at-least-32-bytes";
 
 describe("Own Auth webhooks", () => {
+  it("does not start a claimed delivery after erasure removes its stored event", async () => {
+    const storage = new InMemoryAuthStorage();
+    const send = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const auth = createWebhookAuth(storage, send);
+    const signup = await auth.signUpEmailPassword({ email: "claimed-erasure@example.com", password: "correct-horse" });
+    const claim = storage.webhookStorage.claimWebhookDeliveries.bind(storage.webhookStorage);
+    vi.spyOn(storage.webhookStorage, "claimWebhookDeliveries").mockImplementationOnce(async (input) => {
+      const claimed = await claim(input);
+      await auth.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase", sessionToken: signup.sessionToken });
+      return claimed;
+    });
+    expect(await auth.processWebhookDeliveries()).toMatchObject({ claimed: 1, leaseLost: 1, delivered: 0 });
+    expect(send).not.toHaveBeenCalled();
+    expect(await auth.listWebhookDeliveries()).toEqual([]);
+  });
+
+  it("removes a request already in progress and prevents its retry or settlement recreating records", async () => {
+    const storage = new InMemoryAuthStorage();
+    let started!: () => void;
+    const inProgress = new Promise<void>((resolve) => { started = resolve; });
+    let finish!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => { finish = resolve; });
+    const send = vi.fn<typeof fetch>(async () => { started(); return response; });
+    const auth = createWebhookAuth(storage, send);
+    const signup = await auth.signUpEmailPassword({ email: "in-progress-erasure@example.com", password: "correct-horse" });
+    const queued = await auth.listWebhookDeliveries();
+    const processing = auth.processWebhookDeliveries();
+    await inProgress;
+    await auth.eraseUser({ operationId: crypto.randomUUID(), confirmation: "erase", sessionToken: signup.sessionToken });
+    finish(new Response(null, { status: 503 }));
+    expect(await processing).toMatchObject({ leaseLost: 1, retried: 0 });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await auth.listWebhookDeliveries()).toEqual([]);
+    expect(await storage.webhookStorage.listWebhookAttempts([queued[0]!.id])).toEqual([]);
+    await expect(auth.retryWebhookDelivery({ deliveryId: queued[0]!.id })).rejects.toMatchObject({ code: "webhook_delivery_not_retryable" });
+  });
   it("validates endpoint configuration synchronously", () => {
     const create = (endpoint: Record<string, unknown>) => () => createOwnAuth({
       storage: new InMemoryAuthStorage(),

@@ -13,6 +13,30 @@ import {
 const tokenPepper = "administration-test-pepper";
 
 describe("Own Auth administration", () => {
+  it("requires separate erasure permissions and resolves a disabled sole owner's organisation", async () => {
+    const granted = new Set(["users:erase"]);
+    const seen: AdministrationAuthorizationContext[] = [];
+    const auth = createAdministrationAuth((context) => { seen.push(context); return granted.has(context.action); });
+    const actor = await auth.createUser({ email: "erasure-actor@example.com" });
+    const target = await auth.createUser({ email: "disabled-owner@example.com" });
+    const { organisation } = await auth.createOrganisation({ name: "Owned organisation", ownerUserId: target.id });
+    await auth.storage.updateUser(target.id, { disabledAt: new Date() });
+    const input = { actorUserId: actor.id, userId: target.id, operationId: crypto.randomUUID(), reason: "requested",
+      organisations: [{ organisationId: organisation.id, action: "delete" as const, confirmation: "delete_organisation" as const }] };
+    await expect(auth.admin.eraseUser(input)).rejects.toMatchObject({ code: "permission_denied" });
+    expect(await auth.storage.getUserById(target.id)).not.toBeNull();
+    granted.add("organisations:resolve-erasure");
+    expect(await auth.admin.eraseUser(input)).toMatchObject({ status: "complete" });
+    await expect(auth.admin.getUserErasure({ actorUserId: actor.id, operationId: input.operationId })).rejects.toMatchObject({ code: "permission_denied" });
+    granted.add("erasures:read");
+    expect(await auth.admin.getUserErasure({ actorUserId: actor.id, operationId: input.operationId })).toMatchObject({ status: "complete" });
+    await expect(auth.admin.resumeUserErasure({ actorUserId: actor.id, operationId: input.operationId })).rejects.toMatchObject({ code: "permission_denied" });
+    granted.add("erasures:resume");
+    expect(await auth.admin.resumeUserErasure({ actorUserId: actor.id, operationId: input.operationId })).toMatchObject({ status: "complete" });
+    await expect(auth.admin.getUserErasure({ actorUserId: actor.id, operationId: crypto.randomUUID() })).rejects.toMatchObject({ code: "erasure_operation_not_found" });
+    await expect(auth.admin.eraseUser({ ...input, userId: "missing", operationId: crypto.randomUUID(), organisations: [] })).rejects.toMatchObject({ code: "user_not_found" });
+    expect(seen.some((context) => context.action === "organisations:resolve-erasure" && context.organisationId === organisation.id)).toBe(true);
+  });
   it("is disabled by default and fails closed when authorization denies or throws", async () => {
     const storage = new InMemoryAuthStorage();
     const unconfigured = createOwnAuth({ storage, tokenPepper });

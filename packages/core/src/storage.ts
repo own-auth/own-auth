@@ -63,13 +63,13 @@ export interface AuthStorage {
   getUserByPhone(phone: string): Promise<User | null>;
   listUsers?(filter?: ListUsersFilter): Promise<User[]>;
 
-  createAccount(account: Account): Promise<Account>;
-  createUserAndAccount(user: User, account: Account): Promise<Account>;
+  createAccount(account: Account, authorityExpiresAt?: Date): Promise<Account>;
+  createUserAndAccount(user: User, account: Account, authorityExpiresAt?: Date): Promise<Account>;
   getAccountByProvider(provider: string, providerAccountId: string): Promise<Account | null>;
   listAccountsByUserId(userId: string): Promise<Account[]>;
   deleteAccount(id: string): Promise<boolean>;
 
-  createSession(session: Session): Promise<Session>;
+  createSession(session: Session, authorityExpiresAt?: Date): Promise<Session>;
   getSessionByTokenHash(tokenHash: string): Promise<Session | null>;
   updateSession(id: string, patch: Partial<Session>): Promise<Session | null>;
   listSessionsByUserId(userId: string): Promise<Session[]>;
@@ -178,7 +178,7 @@ export interface AuthStorage {
     consumedAt: Date
   ): Promise<RecoveryCode | null>;
 
-  createMfaChallenge(challenge: MfaChallenge): Promise<MfaChallenge>;
+  createMfaChallenge(challenge: MfaChallenge, authorityExpiresAt?: Date): Promise<MfaChallenge>;
   getMfaChallengeById(id: string): Promise<MfaChallenge | null>;
   getMfaChallengeByTokenHash(tokenHash: string): Promise<MfaChallenge | null>;
   incrementMfaChallengeAttempts(id: string, attemptedAt: Date): Promise<MfaChallenge | null>;

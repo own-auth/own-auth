@@ -31,6 +31,8 @@ interface MemoryDeviceAuthorizationDependencies {
 
 export class MemoryDeviceAuthorizationStorage
   implements DeviceAuthorizationStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] { return [this.authorizations]; }
   private readonly authorizations = new Map<string, DeviceAuthorization>();
 
   constructor(private readonly dependencies: MemoryDeviceAuthorizationDependencies) {}

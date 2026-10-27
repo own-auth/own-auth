@@ -7,7 +7,8 @@ import type {
   AuditEventType,
   JsonRecord,
   RequestContext,
-  User
+  User,
+  ExternalAccountProvider
 } from "./types.js";
 import type { SessionResult } from "./auth-engine-types.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
@@ -96,7 +97,8 @@ export async function createSession(
   user: User,
   context?: RequestContext,
   authenticationMethods: string[] = ["password"],
-  assuranceLevel: "aal1" | "aal2" = "aal1"
+  assuranceLevel: "aal1" | "aal2" = "aal1",
+  authorityExpiresAt?: Date
 ): Promise<SessionResult> {
   assertUserEnabled(user);
 
@@ -117,7 +119,7 @@ export async function createSession(
     authenticationMethods,
     assuranceLevel,
     authenticatedAt: now
-  });
+  }, authorityExpiresAt);
 
   await audit(ctx, {
     eventType: "session.created",
@@ -199,11 +201,18 @@ export async function rateLimit(
   limit: number,
   windowMs: number
 ): Promise<void> {
+  const providerAccount = action.startsWith("external-")
+    ? await ctx.storage.getAccountByProvider(action.slice("external-".length) as ExternalAccountProvider, identifier) : null;
+  const owner = providerAccount ? await ctx.storage.getUserById(providerAccount.userId) : await ctx.storage.getUserById(identifier)
+    ?? (identifier.includes("@") ? await ctx.storage.getUserByEmail(identifier) : null)
+    ?? (identifier.startsWith("+") ? await ctx.storage.getUserByPhone(identifier) : null);
+  if (providerAccount && !owner) throw new AuthError("invalid_credentials", "Authentication request is no longer valid", 401);
   try {
     await enforceRateLimit(ctx.rateLimitStore, {
       key: `${action}:${identifier}`,
       limit,
-      windowMs
+      windowMs,
+      ownerUserId: owner?.id
     });
   } catch (error) {
     if (isAuthError(error) && error.code === "rate_limited") {

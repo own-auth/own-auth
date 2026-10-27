@@ -16,6 +16,10 @@ import type {
 } from "./webhook-types.js";
 
 export class MemoryWebhookStorage implements WebhookStorage {
+  /** @internal */
+  erasureMaps(): Map<string, any>[] { return [this.events, this.deliveries, this.attempts]; }
+  /** @internal */
+  get erasureDeliveries(): Map<string, any> { return this.deliveries; }
   private readonly events = new Map<string, StoredWebhookEvent>();
   private readonly deliveries = new Map<string, WebhookDelivery>();
   private readonly attempts = new Map<string, WebhookAttempt>();
