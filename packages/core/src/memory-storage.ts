@@ -78,6 +78,9 @@ export class InMemoryAuthStorage extends MemoryIdentityStorage implements AuthSt
     if (input.sourceUserId && (!source || source.email !== input.email ||
       (source.emailVerifiedAt && source.disabledAt &&
         !(input.proof.kind === "token" && input.proof.type === "password_reset")))) return null;
+    if (source && proof.kind === "provider" && proof.samlOrganisationId &&
+      someStored(this.members, (member) => member.userId === source.id &&
+        member.organisationId === proof.samlOrganisationId && member.status !== "active")) return null;
     if (!source && someStored(this.users, (user) => user.email === input.email)) return null;
     const originalSession = source && someStored(this.sessions, (session) =>
       session.userId === source.id && session.tokenHash === input.sessionTokenHash &&

@@ -18,6 +18,7 @@ export async function claimPostgresEmailOwnership(
   const session = bind(input.sessionTokenHash);
   const account = bind(input.verifiedAccountId ?? null);
   const actor = bind(input.proof.kind === "provider" ? input.proof.originalActorUserId ?? null : null);
+  const samlOrganisationId = input.proof.kind === "provider" ? input.proof.samlOrganisationId : undefined;
   const password = input.passwordHash === undefined ? "auth_user.password_hash" : bind(input.passwordHash);
   const newId = bind(input.replacementUser.id);
   let proof = "true";
@@ -31,17 +32,24 @@ export async function claimPostgresEmailOwnership(
       ),`
     : "";
   if (input.proof.kind === "token") proof = "exists (select 1 from locked_token)";
+  const membershipCte = samlOrganisationId
+    ? `locked_membership as materialized (
+        select status from own_auth_organisation_members
+        where user_id = ${sourceId} and organisation_id = ${bind(samlOrganisationId)} for update
+      ),`
+    : "";
   const entries = databaseColumnEntries(userColumns, input.replacementUser);
   const candidateColumns = entries.map(([, column]) => column).join(", ");
   const candidateValues = entries.map(([key]) => bind(input.replacementUser[key])).join(", ");
   const primary = input.replacementAccount;
-  const sql = `with ${tokenCte}
+  const sql = `with ${tokenCte}${membershipCte}
     original as materialized (
       select auth_user.* from own_auth_users auth_user
       where auth_user.id = ${sourceId} and auth_user.email = ${email}
         and (auth_user.email_verified_at is null or auth_user.disabled_at is null
           or ${input.proof.kind === "token" && input.proof.type === "password_reset" ? "true" : "false"})
         and ${proof}
+        ${samlOrganisationId ? "and not exists (select 1 from locked_membership where status <> 'active')" : ""}
         ${input.proof.kind === "token" && input.proof.type === "password_reset"
           ? "and auth_user.password_reset_version = (select password_reset_version from locked_token)" : ""}
       for update

@@ -8,6 +8,30 @@ import { assertConformanceEqual, assertSingleValueWinner } from "./conformance-a
 import { uniqueConformanceValue as unique } from "./conformance-values.js";
 
 export const emailOwnershipAdapterCases: readonly AtomicAdapterCase[] = [
+  ...([false, true] as const).map((removed): AtomicAdapterCase => ({
+    name: removed
+      ? "rejects a SAML mailbox claim after membership removal without changing ownership"
+      : "allows an active SAML member to claim a mailbox despite removal from another organisation",
+    async run({ storage, scim }) {
+      const input = await pendingClaim(storage[0]);
+      const matching = await provisionedClaim(storage[0], scim[0], input, input.email);
+      const other = await provisionedClaim(storage[0], scim[0], input, `${unique("other")}@example.com`);
+      await storage[0].updateOrganisationMember(other.membershipId, { status: "removed", removedAt: input.verifiedAt });
+      if (removed) {
+        await storage[0].updateOrganisationMember(matching.membershipId, { status: "removed", removedAt: input.verifiedAt });
+      }
+      input.proof = { kind: "provider", samlOrganisationId: matching.connectionId };
+      const result = await storage[0].claimEmailOwnershipAtomically(input);
+      assertConformanceEqual(result?.user.id ?? null, removed ? null : input.replacementUser.id, "SAML membership decision");
+      assertConformanceEqual((await storage[1].getUserByEmail(input.email))?.id,
+        removed ? input.sourceUserId : input.replacementUser.id, "mailbox owner");
+      assertConformanceEqual((await storage[1].listSessionsByUserId(input.sourceUserId!))[0]?.revokedAt?.getTime() ?? null,
+        removed ? null : input.verifiedAt.getTime(), "original session changes only after an allowed claim");
+      assertConformanceEqual((await scim[1].getUserById(matching.id))?.userId,
+        removed ? input.sourceUserId : input.replacementUser.id, "matching SCIM owner");
+      assertConformanceEqual((await scim[1].getUserById(other.id))?.userId, input.sourceUserId, "unrelated SCIM owner");
+    }
+  })),
   ...([false, true] as const).map((rollback): AtomicAdapterCase => ({
     name: rollback
       ? "preserves SCIM ownership and resource versions when a mailbox claim rolls back"

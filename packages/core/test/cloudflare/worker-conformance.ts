@@ -95,6 +95,7 @@ const storageMethods = new Set([
   "revokeInvitationAtomically",
   "rotateOAuthCredential",
   "updatePasskeyCounter",
+  "updateOrganisationMember",
   "updateSession",
   "updateTotpFactor",
   "updateUser",

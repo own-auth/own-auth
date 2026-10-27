@@ -155,6 +155,72 @@ describe("SAML authentication", () => {
     )).toMatchObject({ status: "removed" });
   });
 
+  it.each(["sign_in", "link", "concurrent_provisioning", "email_linking"] as const)(
+    "preserves a removed pending account and denies %s before claiming its mailbox",
+    async (path) => {
+      const { harness, original } = await pendingSamlMember();
+      if (path === "email_linking") {
+        await harness.auth.saml.unlinkIdentity({
+          connectionId: harness.connection.id, actorUserId: original.user.id
+        });
+        await harness.auth.saml.updateConnection({
+          connectionId: harness.connection.id, actorUserId: harness.ownerId,
+          accountLinking: "verified_email"
+        });
+      }
+      await harness.auth.removeMember({
+        organisationId: harness.organisation.id, userId: original.user.id, actorUserId: harness.ownerId
+      });
+      const before = {
+        user: await harness.storage.getUserById(original.user.id),
+        accounts: await harness.storage.listAccountsByUserId(original.user.id),
+        members: await harness.storage.listOrganisationMembers(harness.organisation.id),
+        users: await harness.storage.listUsers(),
+        sessions: await harness.storage.listSessionsByUserId(original.user.id)
+      };
+      const claim = vi.spyOn(harness.storage, "claimEmailOwnershipAtomically");
+      if (path === "concurrent_provisioning") {
+        vi.spyOn(harness.storage, "getAccountByProvider").mockResolvedValueOnce(null);
+        vi.spyOn(harness.storage, "getUserByEmail").mockResolvedValueOnce(null);
+      }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (path === "link") {
+          await harness.auth.saml.createLinkUrl({
+            connectionId: harness.connection.id, actorUserId: original.user.id
+          });
+        } else {
+          await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
+        }
+        await expect(harness.complete()).rejects.toMatchObject({ code: "saml_membership_required" });
+      }
+      expect(claim).not.toHaveBeenCalled();
+      expect(await harness.storage.getUserById(original.user.id)).toEqual(before.user);
+      expect(await harness.storage.listAccountsByUserId(original.user.id)).toEqual(before.accounts);
+      expect(await harness.storage.listOrganisationMembers(harness.organisation.id)).toEqual(before.members);
+      expect(await harness.storage.listUsers()).toEqual(before.users);
+      expect(await harness.storage.listSessionsByUserId(original.user.id)).toEqual(before.sessions);
+    }
+  );
+
+  it("rejects removal completed after the initial membership check without changing the account", async () => {
+    const { harness, original } = await pendingSamlMember();
+    const claim = harness.storage.claimEmailOwnershipAtomically.bind(harness.storage);
+    vi.spyOn(harness.storage, "claimEmailOwnershipAtomically").mockImplementationOnce(async (input) => {
+      await harness.auth.removeMember({
+        organisationId: harness.organisation.id, userId: original.user.id, actorUserId: harness.ownerId
+      });
+      return claim(input);
+    });
+    await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
+    await expect(harness.complete()).rejects.toMatchObject({ code: "invalid_token" });
+    expect((await harness.storage.getUserByEmail(harness.provider.email))?.id).toBe(original.user.id);
+    expect((await harness.storage.getUserById(original.user.id))?.emailVerifiedAt).toBeNull();
+    expect(await harness.storage.listSessionsByUserId(original.user.id)).toHaveLength(1);
+    expect(await harness.storage.listOrganisationMembers(harness.organisation.id)).toHaveLength(2);
+    await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
+    await expect(harness.complete()).rejects.toMatchObject({ code: "saml_membership_required" });
+  });
+
   it("returns an MFA challenge without creating a session", async () => {
     const harness = await createSamlHarness();
     await harness.auth.saml.createSignInUrl({ connectionId: harness.connection.id });
@@ -251,3 +317,16 @@ describe("SAML authentication", () => {
     expect(verificationEvents).toHaveLength(1);
   });
 });
+
+async function pendingSamlMember() {
+  const harness = await createSamlHarness();
+  const original = await harness.auth.signUpEmailPassword({
+    email: harness.provider.email, password: "original-password"
+  });
+  await harness.auth.saml.createLinkUrl({
+    connectionId: harness.connection.id, actorUserId: original.user.id
+  });
+  await harness.complete();
+  expect((await harness.storage.getUserById(original.user.id))?.emailVerifiedAt).toBeNull();
+  return { harness, original };
+}

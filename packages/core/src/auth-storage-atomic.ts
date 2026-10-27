@@ -25,7 +25,7 @@ export interface AtomicEmailOwnershipInput {
   replacementAccount: Account;
   proof:
     | { kind: "token"; tokenHash: string; type: "magic_link" | "email_verification" | "password_reset" }
-    | { kind: "provider"; originalActorUserId?: string };
+    | { kind: "provider"; originalActorUserId?: string; samlOrganisationId?: string };
   sessionTokenHash: string | null;
   /** Only the provider identity independently verified by this request may move. */
   verifiedAccountId?: string;

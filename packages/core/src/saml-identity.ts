@@ -106,8 +106,9 @@ async function linkIdentityByEmail(
       409
     );
   }
+  await membershipFor(ctx, connection, user.id);
   const owner = await claimEmailOwnership(ctx, {
-    user, email, proof: { kind: "provider" }, request
+    user, email, proof: { kind: "provider", samlOrganisationId: connection.organisationId }, request
   });
   await linkIdentity(ctx, connection, identity, owner, request);
   return { user: owner, linked: true };
@@ -126,10 +127,14 @@ async function resolveExistingAccount(
   }
   let user = await ctx.storage.getUserById(account.userId);
   if (!user) throw new AuthError("invalid_credentials", "Invalid SAML identity", 401);
+  await membershipFor(ctx, connection, user.id);
   if (email && email === user.email) {
     user = await claimEmailOwnership(ctx, {
       user, email, verifiedAccountId: account.id, request,
-      proof: { kind: "provider", originalActorUserId: transaction.intent === "link" ? transaction.userId ?? undefined : undefined }
+      proof: {
+        kind: "provider", samlOrganisationId: connection.organisationId,
+        originalActorUserId: transaction.intent === "link" ? transaction.userId ?? undefined : undefined
+      }
     });
   }
   assertUserEnabled(user);
@@ -152,6 +157,7 @@ async function linkIdentity(
   user: User,
   request?: RequestContext
 ): Promise<Account> {
+  const existingMembership = await membershipFor(ctx, connection, user.id);
   const sameProvider = (await ctx.storage.listAccountsByUserId(user.id))
     .find((account) => account.provider === identity.provider);
   if (sameProvider) {
@@ -163,8 +169,8 @@ async function linkIdentity(
     );
   }
 
-  const membership = await membershipFor(ctx, connection, user.id);
   const now = new Date();
+  const membership = existingMembership ? undefined : createMembership(connection, user.id, now);
   const account = accountFor(
     user.id,
     identity.provider,
@@ -182,14 +188,14 @@ async function linkIdentity(
     metadata: { connectionId: connection.id },
     now
   })];
-  if (membership.created) {
-    auditEvents.push(memberProvisionedEvent(connection, user.id, membership.member.role, request, now));
+  if (membership) {
+    auditEvents.push(memberProvisionedEvent(connection, user.id, membership.role, request, now));
   }
   const { storage } = requireSaml(ctx);
   try {
     await storage.commitIdentity({
       account,
-      membership: membership.created ? membership.member : undefined,
+      membership,
       auditEvents
     });
     await recordCommittedAuthEvents(ctx, auditEvents);
@@ -205,7 +211,7 @@ async function linkIdentity(
       connection.organisationId,
       user.id
     );
-    if (membership.created && currentMembership?.status === "active") {
+    if (membership && currentMembership?.status === "active") {
       const committedEvents = auditEvents.slice(0, 1);
       await storage.commitIdentity({ account, auditEvents: committedEvents });
       await recordCommittedAuthEvents(ctx, committedEvents);
@@ -299,19 +305,20 @@ async function ensureMembership(
   user: User,
   request?: RequestContext
 ): Promise<void> {
-  const membership = await membershipFor(ctx, connection, user.id);
-  if (!membership.created) return;
+  if (await membershipFor(ctx, connection, user.id)) return;
+  const now = new Date();
+  const membership = createMembership(connection, user.id, now);
   const { storage } = requireSaml(ctx);
   const auditEvents = [memberProvisionedEvent(
     connection,
     user.id,
-    membership.member.role,
+    membership.role,
     request,
-    new Date()
+    now
   )];
   try {
     await storage.commitIdentity({
-      membership: membership.member,
+      membership,
       auditEvents
     });
     await recordCommittedAuthEvents(ctx, auditEvents);
@@ -329,15 +336,15 @@ async function membershipFor(
   ctx: AuthEngineContext,
   connection: SamlConnection,
   userId: string
-): Promise<{ member: OrganisationMember<string>; created: boolean }> {
+): Promise<OrganisationMember<string> | null> {
   const existing = await ctx.storage.getOrganisationMember(connection.organisationId, userId);
   if (existing) {
     if (existing.status !== "active") throw membershipRequired();
-    return { member: existing, created: false };
+    return existing;
   }
   if (!connection.jitProvisioningEnabled) throw membershipRequired();
   requireJitRole(ctx, connection.jitDefaultRole);
-  return { member: createMembership(connection, userId, new Date()), created: true };
+  return null;
 }
 
 function createMembership(

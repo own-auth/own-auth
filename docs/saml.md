@@ -156,6 +156,10 @@ With JIT provisioning enabled, a first SAML sign-in can atomically create:
 
 The configured default role must exist in the application's authorization configuration and cannot be `owner`. Own Auth does not trust role or group assertions from the identity provider. A member who was removed from the organisation is not silently re-added by a later SAML sign-in.
 
+Membership removal applies to both verified and pending accounts, including sign in and provider linking. SAML checks the original membership before confirming an email or assigning it to a separate verified account.
+
+Custom storage adapters must check membership removal inside `claimEmailOwnershipAtomically` whenever provider proof supplies `samlOrganisationId`. Reject the claim before any account changes when that organisation has an inactive membership for the original user. The membership check and ownership changes must use the same atomic operation, so a completed removal cannot be missed by an earlier application read.
+
 Without JIT provisioning, the user must already have an active membership in the organisation.
 
 ## Request Signing

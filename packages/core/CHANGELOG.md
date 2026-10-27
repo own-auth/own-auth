@@ -4,6 +4,8 @@
 
 ### Security
 
+- SAML sign in and provider linking preserve organisation membership removal for accounts whose email is still unverified.
+
 - Updated the SAML XML parser resolution from `@xmldom/xmldom@0.8.13` to `0.8.15` across the SAML, XML signature, and XML encryption dependency paths. Applications must also update affected resolutions in their own lockfiles.
 
 - Successful password resets and authenticated password changes now invalidate every earlier reset link, including resets already in progress. Password hash upgrades cannot overwrite a password replaced by another request.

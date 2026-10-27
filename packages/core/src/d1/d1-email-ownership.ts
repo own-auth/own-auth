@@ -14,6 +14,7 @@ export async function claimD1EmailOwnership(
   const tokenHash = input.proof.kind === "token" ? input.proof.tokenHash : null;
   const tokenType = input.proof.kind === "token" ? input.proof.type : null;
   const providerProof = input.proof.kind === "provider" ? 1 : 0;
+  const samlOrganisationId = input.proof.kind === "provider" ? input.proof.samlOrganisationId : undefined;
   const statement = (sql: string, values: unknown[]) => db.prepare(sql).bind(...values.map(toD1Value));
   const retention = emailOwnershipRetentionSql("auth_user", "?5", "?6", "?4", "?12");
   const proof = `(?11 = 1 or exists (
@@ -49,6 +50,8 @@ export async function claimD1EmailOwnership(
       where auth_user.id = ?2 and auth_user.email = ?3
         and (auth_user.email_verified_at is null or auth_user.disabled_at is null
           or ${input.proof.kind === "token" && input.proof.type === "password_reset" ? "1" : "0"}) and ${proof}
+        and (?13 is null or not exists (select 1 from own_auth_organisation_members
+          where user_id = ?2 and organisation_id = ?13 and status <> 'active'))
     ) update own_auth_users set
       auth_method_operation_id = ?1,
       email = case when (select keep_original from original) then email else null end,
@@ -60,7 +63,8 @@ export async function claimD1EmailOwnership(
       input.operationId, input.sourceUserId, input.email, at, input.sessionTokenHash,
       input.verifiedAccountId ?? null, input.passwordHash ?? null,
       input.passwordHash === undefined ? 0 : 1, tokenHash, tokenType, providerProof,
-      input.proof.kind === "provider" ? input.proof.originalActorUserId ?? null : null
+      input.proof.kind === "provider" ? input.proof.originalActorUserId ?? null : null,
+      samlOrganisationId ?? null
     ]),
     statement(`insert into own_auth_users (${newColumns}, auth_method_operation_id)
       select ${newValues}, ${operation}

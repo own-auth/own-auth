@@ -35,7 +35,7 @@ export async function verifyPairedSamlEmail(
   return claimEmailOwnership(ctx, {
     user,
     email: normalizedEmail,
-    proof: { kind: "provider", originalActorUserId },
+    proof: { kind: "provider", originalActorUserId, samlOrganisationId: connection.organisationId },
     verifiedAccountId,
     request,
     metadata: { method: "saml", samlConnectionId, scimConnectionId: connection.id }
