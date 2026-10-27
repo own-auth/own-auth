@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.13
+
+### Added
 
 - Added complete user erasure through the core API, administration, HTTP handler, and client. Erasure removes credentials and personal records, preserves other users, resolves organisation ownership, and durably retries required plugin and Cloud cleanup.
 - Apply migration `020_user_erasure` before using this feature with Postgres or D1. Custom stores and plugins must declare and implement complete deletion. Cloud completion requires the coordinated receiver update. See the user erasure guide.
-
-## 0.3.13
 
 ### Security
 
