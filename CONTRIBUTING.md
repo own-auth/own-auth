@@ -58,7 +58,7 @@ security release process in `SECURITY.md`.
 
 Releases are maintainer operations. Prepare the release before publishing:
 
-1. Set the same version in `package.json` and `packages/core/package.json`.
+1. Set the same version in `packages/core/package.json` and `packages/core/src/version.ts`.
 2. Add the matching base-version section to `CHANGELOG.md`.
 3. Commit and push the release commit to `main`.
 4. Make sure the working tree is clean and local `main` matches `origin/main`.

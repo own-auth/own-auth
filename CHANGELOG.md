@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.13
+
 ### Security
 
 - SAML sign in and provider linking preserve organisation membership removal for accounts whose email is still unverified.

@@ -1,1 +1,1 @@
-export const OWN_AUTH_VERSION = "0.3.12";
+export const OWN_AUTH_VERSION = "0.3.13";

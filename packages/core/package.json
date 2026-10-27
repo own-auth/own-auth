@@ -1,6 +1,6 @@
 {
   "name": "own-auth",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "type": "module",
   "description": "Framework-independent TypeScript authentication that keeps auth data under your control.",
   "license": "MIT",
