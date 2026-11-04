@@ -226,6 +226,57 @@ describe("OAuth browser binding in the core API", () => {
 });
 
 describe("OAuth browser binding in the HTTP handler", () => {
+  it("rejects OAuth state at the magic link endpoint and preserves the real callback", async () => {
+    const { handler, exchange } = harness();
+    const started = await start(handler, "google");
+    const response = await handler(jsonRequest("/api/auth/magic-link/verify", {
+      token: started.state
+    }, {}, origin));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "invalid_token" } });
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(exchange).not.toHaveBeenCalled();
+    const completed = await handler(callback("google", started.state, started.browserCookie));
+    expect(completed.status).toBe(302);
+    expect(completed.headers.get("set-cookie")).toContain("own_auth_session=");
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["state", "browserBindingToken", "authorizationURL"])(
+    "rejects caller supplied %s without issuing an OAuth cookie",
+    async (field) => {
+      const { handler, storage, exchange } = harness();
+      const create = vi.spyOn(storage, "createOAuthTransaction");
+      const response = await handler(jsonRequest("/api/auth/oauth/start", {
+        provider: "google", [field]: "caller-selected-authentication-proof"
+      }, {}, origin));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "validation_error" } });
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+      expect(exchange).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    "https://app.example.com.attacker.test/",
+    "https://app.example.com@attacker.test/",
+    "https://attacker.test/",
+    "javascript:alert(1)",
+    "//attacker.test/"
+  ])("rejects OAuth destination %s before issuing state or cookies", async (destination) => {
+    const { handler, storage } = harness();
+    const create = vi.spyOn(storage, "createOAuthTransaction");
+    const response = await handler(jsonRequest("/api/auth/oauth/start", {
+      provider: "google", destination
+    }, {}, origin));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "redirect_not_allowed" } });
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("location")).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["google", "GET"], ["github", "GET"], ["apple", "GET"], ["apple", "POST"]
   ] as const)("requires the initiating cookie for %s %s callbacks", async (provider, method) => {

@@ -30,6 +30,8 @@ All tokens, including magic links, password resets, email verification, phone co
 
 The raw token is sent to the user in an email link or SMS and is never persisted by Own Auth.
 
+Authentication proofs are restricted to their issued purpose. Email token lookup and atomic consumption require the expected token type. OAuth state uses separate transaction storage, and session lookup uses separate session storage. An OAuth state value cannot verify an email, reset a password, complete a magic link, or authenticate a session. Rejecting a proof at the wrong endpoint must leave its legitimate use available.
+
 Password reset links also record the user's current password reset version at issuance. Both authenticated password changes and resets advance that version atomically with the password write. Reset verification checks the version inside the same operation, so an older or already running reset cannot replace a newer password. Password hash format upgrades preserve the version and reject writes based on a stale stored hash. Migration `019_password_reset_version` invalidates outstanding legacy reset links; request fresh links after upgrading.
 
 ## Sessions
@@ -76,6 +78,8 @@ Configure only destinations controlled by the application. See [Magic Links](/do
 OAuth redirect transactions store only a peppered state hash, provider, intent, validated destination, interaction mode, opener origin, expiry, and consumption time. State is atomically consumed before the authorization code is exchanged.
 
 Each redirect transaction requires a separate secret from the browser that started it. State is a purpose separated SHA256 commitment to that secret, so browser proof is checked before the existing atomic transaction consumption. The HTTP handler keeps the secret in a temporary cookie and never returns it in JSON or popup messages. A valid provider callback presented by another browser cannot complete sign in or linking. Separate cookies preserve concurrent attempts. The existing transaction still owns expiry and replay protection, and no additional database record is needed.
+
+The OAuth start endpoint accepts a configured provider and generates state and browser proof itself. It rejects caller supplied state, browser proof, and authorization URLs. Browser proof alone cannot authorize a callback without an unexpired transaction issued by the server. OAuth cookies do not expose a signature over caller supplied data. Return destinations are validated before state or cookies are issued, using parsed protocol, hostname, port, and path checks.
 
 PKCE verifier and OIDC nonce values are derived independently from the raw state and are never stored. Google and Apple responses verify signature, issuer, audience, expiry, nonce, subject, and verified-email claims. GitHub identities use the authenticated API response and only verified email addresses.
 
