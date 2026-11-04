@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- IP based authentication limits now share one budget per IPv6 `/64` network and combine IPv4 mapped IPv6 addresses with their IPv4 equivalent. Changing address spelling or rotating addresses within the same IPv6 network no longer creates fresh budgets.
+
 ## 0.3.13
 
 ### Added

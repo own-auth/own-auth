@@ -38,6 +38,7 @@ import type {
 } from "./authorization-server-types.js";
 import { createId } from "./crypto.js";
 import { isAuthError } from "./errors.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 
 export async function startAuthorization(
   ctx: AuthEngineContext,
@@ -307,7 +308,7 @@ async function enforceProtocolRateLimit(
     await rateLimit(
       ctx,
       "authorization_server_start",
-      identifier,
+      rateLimitIpIdentifier(identifier),
       authorizationServerRateLimits.start,
       authorizationServerRateLimitWindowMs
     );

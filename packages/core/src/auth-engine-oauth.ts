@@ -32,6 +32,7 @@ import {
   resolveExternalIdentity
 } from "./auth-engine-external.js";
 import { traceOAuthProvider } from "./telemetry.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 
 const oauthTransactionTtlMs = 10 * minute;
 
@@ -361,6 +362,6 @@ async function rateLimitByIp(
   windowMs: number
 ): Promise<void> {
   if (ipAddress) {
-    await rateLimit(ctx, action, ipAddress, limit, windowMs);
+    await rateLimit(ctx, action, rateLimitIpIdentifier(ipAddress), limit, windowMs);
   }
 }

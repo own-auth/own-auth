@@ -18,6 +18,7 @@ import type {
 } from "./plugin-types.js";
 import { createOwnAuthPluginContractFingerprint } from "./plugin-contract.js";
 import { matchesJsonSchema } from "./http/validation.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 
 const maximumBeforeHookTimeoutMs = 5_000;
 
@@ -252,7 +253,7 @@ export class OwnAuthPluginRuntime {
     );
     if (!definition) throw new Error("Validated plugin rate limit is missing");
     const key = definition.key === "ip"
-      ? context.request.ipAddress ?? null
+      ? context.request.ipAddress ? rateLimitIpIdentifier(context.request.ipAddress) : null
       : definition.key === "user"
         ? context.session?.user.id ?? null
         : await definition.key(context);

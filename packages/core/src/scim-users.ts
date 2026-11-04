@@ -1,5 +1,6 @@
 import { createId } from "./crypto.js";
 import { AuthError } from "./errors.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 import {
   createAuditEvent,
   rateLimit,
@@ -50,7 +51,7 @@ export async function authenticateRequest(
       await rateLimit(
         ctx,
         "scim-auth-failed",
-        request.ipAddress,
+        rateLimitIpIdentifier(request.ipAddress),
         config.failedAuthLimit,
         config.failedAuthWindowMs
       );
