@@ -79,7 +79,7 @@ Each redirect transaction requires a separate secret from the browser that start
 
 PKCE verifier and OIDC nonce values are derived independently from the raw state and are never stored. Google and Apple responses verify signature, issuer, audience, expiry, nonce, subject, and verified-email claims. GitHub identities use the authenticated API response and only verified email addresses.
 
-Explicit provider linking is the default. A matching verified email does not silently link to an existing user unless `oauth.accountLinking` is set to `verified_email`. Unverified emails are never used for account linking.
+Explicit provider linking is the default. Linking by verified email requires `oauth.accountLinking: "verified_email"`. For both redirect callbacks and Google One Tap, custom adapters must return boolean `emailVerified: true` before an email claim can create an account, prove email ownership, or link by email. Truthy strings, numbers, and objects are rejected. Built in providers normalize their claims before returning an identity.
 
 Popup callbacks post only completion state to the exact stored opener origin. OAuth codes, provider tokens, session tokens, and MFA challenge tokens never enter `postMessage`.
 
