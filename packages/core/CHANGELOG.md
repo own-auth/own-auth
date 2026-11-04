@@ -4,6 +4,7 @@
 
 ### Security
 
+- Device approval now requires a prior signed in lookup and a decision from the same reviewing session. Another account with the short code cannot replace that reviewer or decide the request. Custom device storage adapters must implement atomic reviewer claims and enforce ownership on approval and denial. No new schema migration is required.
 - Custom OAuth adapter email claims now require boolean verification before account creation or linking. A truthy string such as `"false"` can no longer prove ownership of another person's email address.
 - IP based authentication limits now share one budget per IPv6 `/64` network and combine IPv4 mapped IPv6 addresses with their IPv4 equivalent. Changing address spelling or rotating addresses within the same IPv6 network no longer creates fresh budgets.
 

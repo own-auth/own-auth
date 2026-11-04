@@ -133,13 +133,17 @@ await auth.authorizationServer.denyDeviceAuthorization({
 });
 ```
 
-Looking up a code does not reserve it for that user. Approval or denial atomically binds the request and records the first decision. If two users decide at the same time, one succeeds and the other receives `AuthError` with `code === "device_authorization_already_decided"`.
+The first signed in lookup atomically reserves the pending request for that user and session. Load it with `getDeviceAuthorization` before approval or denial, and submit the decision from that same session. Another account or session cannot claim, approve, or deny it. Looking up the request again from its reviewing session is allowed. A signed out lookup does not reserve it. Concurrent decisions from the reviewing session still produce only one winner.
+
+If the reviewing session ends, start a new device request. A stolen code can still be claimed before the real user opens the approval page. Show the checked client name and requested permissions, and ask the user to confirm that the same code is visible on a device they control.
+
+Custom device storage adapters must implement `claimDeviceAuthorization`, returning a boolean success result, and enforce the stored user and session inside atomic approval and denial operations. Existing device records contain these fields, so no schema migration is required.
 
 The page-facing SDK can return:
 
 | Code | Meaning |
 |---|---|
-| `device_authorization_invalid` | The code is malformed, unknown, expired, or no longer usable. |
+| `device_authorization_invalid` | The code is malformed, unknown, expired, unclaimed for a decision, or reserved by another session. |
 | `device_authorization_already_decided` | Another approval or denial completed first. |
 | `invalid_session` | The approval or denial did not include a valid signed-in session. |
 | `rate_limited` | Too many code lookups were attempted. |

@@ -41,6 +41,7 @@ export {
 } from "./authorization-server-storage.js";
 export type {
   ApproveDeviceAuthorizationStorageInput,
+  ClaimDeviceAuthorizationStorageInput,
   AuthorizationCodeDpopBinding,
   AuthorizationServerCapableStorage,
   AuthorizationServerStorage,

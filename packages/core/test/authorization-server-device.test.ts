@@ -145,6 +145,7 @@ describe("OAuth device authorization", () => {
     expect(earlyPoll.status).toBe(400);
     await expect(earlyPoll.json()).resolves.toMatchObject({ error: "slow_down" });
 
+    await auth.authorizationServer.getDeviceAuthorization({ userCode: started.user_code, sessionToken: signup.sessionToken });
     await auth.authorizationServer.denyDeviceAuthorization({
       userCode: started.user_code,
       sessionToken: signup.sessionToken
@@ -192,6 +193,8 @@ describe("OAuth device authorization", () => {
       sessionToken: signup.sessionToken
     };
 
+    await auth.authorizationServer.getDeviceAuthorization(decision);
+
     const attempts = await Promise.allSettled([
       auth.authorizationServer.approveDeviceAuthorization(decision),
       auth.authorizationServer.denyDeviceAuthorization(decision)
@@ -219,6 +222,7 @@ describe("OAuth device authorization", () => {
       ["openid"],
       keyPair.jwkThumbprint
     );
+    await auth.authorizationServer.getDeviceAuthorization({ userCode: started.user_code, sessionToken: signup.sessionToken });
     await auth.authorizationServer.approveDeviceAuthorization({
       userCode: started.user_code,
       sessionToken: signup.sessionToken
@@ -251,6 +255,34 @@ describe("OAuth device authorization", () => {
       proof
     );
     await expect(accepted.json()).resolves.toMatchObject({ token_type: "DPoP" });
+  });
+
+  it.each([
+    ["approveDeviceAuthorization", "other_user"],
+    ["denyDeviceAuthorization", "other_user"],
+    ["approveDeviceAuthorization", "other_session"],
+    ["denyDeviceAuthorization", "other_session"]
+  ] as const)("requires the reviewing session for %s against %s", async (method, reviewer) => {
+    const { auth, handler } = createHarness();
+    const owner = await auth.signUpEmailPassword({ email: "reviewer@example.com", password: "correct-horse" });
+    const other = await auth.signUpEmailPassword({ email: "other-reviewer@example.com", password: "correct-horse" });
+    const otherSession = await auth.signInEmailPassword({ email: "reviewer@example.com", password: "correct-horse" });
+    if (otherSession.status !== "complete") throw new Error("Expected a completed sign in");
+    const client = await createDeviceClient(auth);
+    const started = await startDeviceFlow(handler, client.clientId, ["openid"]);
+    const decision = { userCode: started.user_code, sessionToken: owner.sessionToken };
+    await expect(auth.authorizationServer[method](decision))
+      .rejects.toMatchObject({ code: "device_authorization_invalid" });
+    await auth.authorizationServer.getDeviceAuthorization(decision);
+    const foreign = { ...decision, sessionToken: reviewer === "other_user" ? other.sessionToken : otherSession.sessionToken };
+    await expect(auth.authorizationServer.getDeviceAuthorization(foreign))
+      .rejects.toMatchObject({ code: "device_authorization_invalid" });
+    await expect(auth.authorizationServer[method](foreign))
+      .rejects.toMatchObject({ code: "device_authorization_invalid" });
+    await auth.authorizationServer[method](decision);
+    const polled = await pollDeviceFlow(handler, client.clientId, started.device_code);
+    if (method === "approveDeviceAuthorization") expect(polled.status).toBe(200);
+    else expect(await polled.json()).toMatchObject({ error: "access_denied" });
   });
 
   it("cleans expired device records on an application-owned schedule", async () => {

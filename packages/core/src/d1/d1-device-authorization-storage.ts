@@ -15,6 +15,7 @@ import type {
 } from "../authorization-server-device-types.js";
 import type {
   ApproveDeviceAuthorizationStorageInput,
+  ClaimDeviceAuthorizationStorageInput,
   DenyDeviceAuthorizationStorageInput,
   DeviceAuthorizationStorage,
   PollDeviceAuthorizationInput
@@ -73,10 +74,22 @@ export class D1DeviceAuthorizationStorage
     return row ? mapDeviceAuthorization(row) : null;
   }
 
+  async claimDeviceAuthorization(input: ClaimDeviceAuthorizationStorageInput): Promise<boolean> {
+    const row = await this.prepare(
+      `update own_auth_device_authorizations set user_id = ?2, session_id = ?3
+       where user_code_hash = ?1 and status = 'pending' and expires_at > ?4
+         and ((user_id is null and session_id is null) or (user_id = ?2 and session_id = ?3))
+       returning id`,
+      [input.userCodeHash, input.userId, input.sessionId, input.claimedAt]
+    ).first<DatabaseRow>();
+    return row !== null;
+  }
+
   async approveDeviceAuthorization(
     input: ApproveDeviceAuthorizationStorageInput
   ): Promise<DeviceAuthorizationDecisionResult> {
     const grant = input.grant;
+    if (grant.userId !== input.userId) return { status: "invalid" };
     const conflictTarget = grant.protectedResourceId === null
       ? "(authorization_client_id, user_id) where protected_resource_id is null"
       : "(authorization_client_id, user_id, protected_resource_id) " +
@@ -89,6 +102,7 @@ export class D1DeviceAuthorizationStorage
          select ?2,?3,?4,?5,?6,?7,?8,?9
          from own_auth_device_authorizations
          where user_code_hash = ?1 and status = 'pending'
+           and user_id = ?4 and session_id = ?11
            and expires_at > ?10 and authorization_client_id = ?3
            and protected_resource_id is ?5
          on conflict ${conflictTarget} do update set
@@ -106,12 +120,13 @@ export class D1DeviceAuthorizationStorage
           grant.createdAt,
           grant.updatedAt,
           grant.revokedAt,
-          input.decidedAt
+          input.decidedAt,
+          input.sessionId
         ]
       ),
       this.prepare(
         `update own_auth_device_authorizations
-         set status = 'approved', user_id = ?4, session_id = ?10,
+         set status = 'approved',
              grant_id = (
                select id from own_auth_authorization_grants
                where authorization_client_id = ?3 and user_id = ?4
@@ -119,6 +134,7 @@ export class D1DeviceAuthorizationStorage
              ),
              approved_scopes = ?12, approved_at = ?11
          where user_code_hash = ?1 and status = 'pending'
+           and user_id = ?4 and session_id = ?10
            and expires_at > ?11 and authorization_client_id = ?3
            and protected_resource_id is ?5
          returning ${deviceAuthorizationReturning}`,
@@ -159,8 +175,9 @@ export class D1DeviceAuthorizationStorage
   ): Promise<DeviceAuthorizationDecisionResult> {
     const row = await this.prepare(
       `update own_auth_device_authorizations
-       set status = 'denied', user_id = ?2, session_id = ?3, denied_at = ?4
+       set status = 'denied', denied_at = ?4
        where user_code_hash = ?1 and status = 'pending' and expires_at > ?4
+         and user_id = ?2 and session_id = ?3
        returning ${deviceAuthorizationReturning}`,
       [input.userCodeHash, input.userId, input.sessionId, input.decidedAt]
     ).first<DatabaseRow>();

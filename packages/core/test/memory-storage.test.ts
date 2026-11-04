@@ -9,6 +9,7 @@ import {
 import {
   describeAtomicAdapterConformance
 } from "./conformance/atomic-adapter-conformance.js";
+import { assertDeviceAuthorizationRaces } from "../../../scripts/device-authorization-worker-conformance.js";
 
 describeAtomicAdapterConformance("Memory", async () => {
   const storage = new InMemoryAuthStorage();
@@ -22,6 +23,13 @@ describeAtomicAdapterConformance("Memory", async () => {
 });
 
 describe("InMemoryAuthStorage", () => {
+  it("reserves device requests for one reviewer before accepting a decision", async () => {
+    const storage = new InMemoryAuthStorage();
+    const authorization = storage.authorizationServerStorage;
+    const device = authorization.deviceAuthorizationStorage;
+    await assertDeviceAuthorizationRaces(storage, authorization, [device, device]);
+  });
+
   it("keeps entity IDs immutable when applying patches", async () => {
     const storage = new InMemoryAuthStorage();
     const user = memoryUser();

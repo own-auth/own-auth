@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { deviceAuthorizationGrantType } from "../../src/index.js";
 import { PostgresAuthStorage } from "../../src/postgres/index.js";
+import { assertDeviceAuthorizationRaces } from "../../../../scripts/device-authorization-worker-conformance.js";
 import {
   deviceAccessToken,
   deviceAuthorization,
@@ -53,6 +54,20 @@ describeWithDatabase("Postgres device authorization integration", () => {
         .toHaveLength(1);
     } finally {
       fixture.close();
+    }
+  });
+
+  it("reserves a device request for one reviewing session across connections", async () => {
+    const [first, second] = await database.connectPair();
+    try {
+      const storage = [new PostgresAuthStorage(first), new PostgresAuthStorage(second)] as const;
+      await assertDeviceAuthorizationRaces(storage[0], storage[0].authorizationServerStorage, [
+        storage[0].authorizationServerStorage.deviceAuthorizationStorage,
+        storage[1].authorizationServerStorage.deviceAuthorizationStorage
+      ]);
+    } finally {
+      first.release();
+      second.release();
     }
   });
 
@@ -162,6 +177,7 @@ async function createFixture(database: PostgresTestDatabase) {
     expiresAt: new Date(now.getTime() + 60_000),
     createdAt: now
   }));
+  await deviceStorage[0].claimDeviceAuthorization({ userCodeHash, userId, sessionId, claimedAt: now });
 
   return {
     id,
