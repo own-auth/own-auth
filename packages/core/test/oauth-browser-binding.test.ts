@@ -20,7 +20,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function harness(provider: ExternalAccountProvider = "google") {
+function harness(
+  provider: ExternalAccountProvider = "google",
+  accountLinking: "explicit" | "verified_email" = "explicit"
+) {
   const storage = new InMemoryAuthStorage();
   const adapter: OAuthProviderAdapter = {
     provider,
@@ -54,10 +57,10 @@ function harness(provider: ExternalAccountProvider = "google") {
     storage,
     tokenPepper: "oauth-browser-test-pepper",
     encryption: { current: { id: "current", key: new Uint8Array(32).fill(4) } },
-    oauth: { adapters: [adapter] },
+    oauth: { adapters: [adapter], accountLinking },
     redirectAllowlist: ["https://app.example.com"]
   });
-  return { auth, storage, exchange, handler: createOwnAuthHandler(auth), provider };
+  return { auth, storage, adapter, exchange, handler: createOwnAuthHandler(auth), provider };
 }
 
 function callbackParameters(authorization: OAuthAuthorizationResult) {
@@ -118,6 +121,35 @@ function callback(
 }
 
 describe("OAuth browser binding in the core API", () => {
+  it.each(["redirect", "one_tap"] as const)(
+    "requires boolean true for custom adapter email claims through %s",
+    async (entry) => {
+      const { auth, storage, adapter, exchange } = harness("google", "verified_email");
+      const victim = await auth.createUser({ email: "browser-bound@example.com" });
+      await storage.updateUser(victim.id, { emailVerifiedAt: new Date() });
+      for (const claim of [false, "false", "true", 1, {}, [], null, undefined]) {
+        const identity = { provider: "google" as const, providerAccountId: "attacker-provider-account",
+          email: victim.email, emailVerified: claim as unknown as boolean, name: null, imageUrl: null };
+        if (entry === "redirect") exchange.mockResolvedValueOnce({ identity, refreshToken: null, scopes: [] });
+        adapter.verifyCredential = async () => identity;
+        if (entry === "redirect") {
+          const started = await auth.createOAuthAuthorizationUrl({ provider: "google" });
+          await expect(auth.completeOAuthSignIn({
+            provider: "google", callbackParameters: callbackParameters(started),
+            browserBindingToken: started.browserBindingToken
+          })).rejects.toMatchObject({ code: "oauth_verified_email_required" });
+        } else {
+          const { nonce } = await auth.prepareGoogleOneTap();
+          await expect(auth.signInWithGoogleOneTap({ nonce, credential: "synthetic-credential" }))
+            .rejects.toMatchObject({ code: "oauth_verified_email_required" });
+        }
+      }
+      expect(await storage.getAccountByProvider("google", "attacker-provider-account")).toBeNull();
+      expect(await storage.listSessionsByUserId(victim.id)).toEqual([]);
+      expect((await storage.getUserById(victim.id))?.email).toBe(victim.email);
+    }
+  );
+
   it("rejects missing, copied, malformed, and mismatched proof before consuming state", async () => {
     const { auth, storage, exchange } = harness();
     const write = vi.spyOn(storage, "createOAuthTransaction");

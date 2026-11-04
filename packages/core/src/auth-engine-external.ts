@@ -211,7 +211,7 @@ function normalizeExternalProvider(provider: string): ExternalAccountProvider {
 }
 
 function verifiedEmail(identity: VerifiedProviderIdentity): string | null {
-  if (!identity.email || !identity.emailVerified) {
+  if (!identity.email || identity.emailVerified !== true) {
     return null;
   }
   const email = normalizeEmail(identity.email);
