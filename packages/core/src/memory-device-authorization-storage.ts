@@ -6,12 +6,14 @@ import type {
 } from "./authorization-server-device-types.js";
 import type {
   ApproveDeviceAuthorizationStorageInput,
+  ClaimDeviceAuthorizationStorageInput,
   DenyDeviceAuthorizationStorageInput,
   DeviceAuthorizationStorage,
   PollDeviceAuthorizationInput
 } from "./authorization-server-device-storage.js";
 import {
   deviceDecisionState,
+  deviceReviewerMatches,
   nextDevicePollAt,
   slowedDevicePolling,
   terminalDevicePollState
@@ -59,24 +61,36 @@ export class MemoryDeviceAuthorizationStorage
     return authorization ? cloneStored(authorization) : null;
   }
 
+  async claimDeviceAuthorization(input: ClaimDeviceAuthorizationStorageInput): Promise<boolean> {
+    const authorization = this.findMutableByUserCodeHash(input.userCodeHash);
+    if (!authorization || deviceDecisionState(authorization, input.claimedAt)) return false;
+    const unclaimed = authorization.userId === null && authorization.sessionId === null;
+    if (!unclaimed && !deviceReviewerMatches(authorization, input.userId, input.sessionId)) return false;
+    authorization.userId = input.userId;
+    authorization.sessionId = input.sessionId;
+    return true;
+  }
+
   async approveDeviceAuthorization(
     input: ApproveDeviceAuthorizationStorageInput
   ): Promise<DeviceAuthorizationDecisionResult> {
     const authorization = this.findMutableByUserCodeHash(input.userCodeHash);
     const decision = deviceDecisionState(authorization, input.decidedAt);
     if (decision) return decision;
+    if (!deviceReviewerMatches(authorization, input.userId, input.sessionId)) return { status: "invalid" };
+    if (input.grant.userId !== input.userId ||
+      input.grant.authorizationClientId !== authorization.authorizationClientId ||
+      input.grant.protectedResourceId !== authorization.protectedResourceId) return { status: "invalid" };
     const grant = this.upsertGrant(input.grant);
-    Object.assign(authorization!, {
+    Object.assign(authorization, {
       status: "approved",
-      userId: input.userId,
-      sessionId: input.sessionId,
       grantId: grant.id,
       approvedScopes: [...input.approvedScopes],
       approvedAt: input.decidedAt
     } satisfies Partial<DeviceAuthorization>);
     return {
       status: "approved",
-      authorization: cloneStored(authorization!),
+      authorization: cloneStored(authorization),
       grant
     };
   }
@@ -87,13 +101,12 @@ export class MemoryDeviceAuthorizationStorage
     const authorization = this.findMutableByUserCodeHash(input.userCodeHash);
     const decision = deviceDecisionState(authorization, input.decidedAt);
     if (decision) return decision;
-    Object.assign(authorization!, {
+    if (!deviceReviewerMatches(authorization, input.userId, input.sessionId)) return { status: "invalid" };
+    Object.assign(authorization, {
       status: "denied",
-      userId: input.userId,
-      sessionId: input.sessionId,
       deniedAt: input.decidedAt
     } satisfies Partial<DeviceAuthorization>);
-    return { status: "denied", authorization: cloneStored(authorization!) };
+    return { status: "denied", authorization: cloneStored(authorization) };
   }
 
   async pollDeviceAuthorization(

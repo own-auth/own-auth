@@ -246,6 +246,7 @@ export {
 } from "./authorization-server-device-storage.js";
 export type {
   ApproveDeviceAuthorizationStorageInput,
+  ClaimDeviceAuthorizationStorageInput,
   DenyDeviceAuthorizationStorageInput,
   DeviceAuthorizationCapableAuthorizationServerStorage,
   DeviceAuthorizationStorage,

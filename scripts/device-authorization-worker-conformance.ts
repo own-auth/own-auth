@@ -20,21 +20,33 @@ export async function assertDeviceAuthorizationRaces(
   deviceStorage: readonly [DeviceAuthorizationStorage, DeviceAuthorizationStorage]
 ): Promise<void> {
   const first = await createFixture(storage, authorizationStorage, deviceStorage[0]);
-  const decisions = await Promise.all([
-    deviceStorage[0].approveDeviceAuthorization({
-      userCodeHash: first.authorization.userCodeHash,
-      userId: first.userId,
-      sessionId: first.sessionId,
-      approvedScopes: first.grant.scopes,
-      grant: first.grant,
-      decidedAt: new Date()
-    }),
-    deviceStorage[1].denyDeviceAuthorization({
-      userCodeHash: first.authorization.userCodeHash,
-      userId: first.userId,
-      sessionId: first.sessionId,
-      decidedAt: new Date()
+  const outsider = await createFixture(storage, authorizationStorage, deviceStorage[0]);
+  const unclaimed = await Promise.all([
+    deviceStorage[0].approveDeviceAuthorization(decisionInput(first)),
+    deviceStorage[1].denyDeviceAuthorization(decisionInput(first))
+  ]);
+  if (unclaimed.some(({ status }) => status !== "invalid")) {
+    throw new Error("An unclaimed device request accepted a decision");
+  }
+  const claims = await Promise.all([first, outsider].map((reviewer, index) =>
+    deviceStorage[index as 0 | 1].claimDeviceAuthorization({
+      ...reviewerInput(first, reviewer), claimedAt: new Date()
     })
+  ));
+  if (claims.filter(Boolean).length !== 1) throw new Error("Device reviewer claim race did not produce one winner");
+  const winner = claims[0] ? first : outsider;
+  const loser = claims[0] ? outsider : first;
+  await assertReviewerRejected(first, loser, deviceStorage, authorizationStorage);
+  const reviewingSession = (await storage.listSessionsByUserId(winner.userId))
+    .find((session) => session.id === winner.sessionId);
+  if (!reviewingSession) throw new Error("Device reviewer session fixture is missing");
+  const alternateSession = await storage.createSession({ ...reviewingSession,
+    id: `${winner.sessionId}_alternate`, tokenHash: `${reviewingSession.tokenHash}_alternate` });
+  await assertReviewerRejected(first, { userId: winner.userId, sessionId: alternateSession.id },
+    deviceStorage, authorizationStorage);
+  const decisions = await Promise.all([
+    deviceStorage[0].approveDeviceAuthorization(decisionInput(first, winner)),
+    deviceStorage[1].denyDeviceAuthorization(decisionInput(first, winner))
   ]);
   const decisionStatuses = decisions.map(({ status }) => status);
   if (
@@ -42,20 +54,20 @@ export async function assertDeviceAuthorizationRaces(
     decisionStatuses.filter((status) => status === "approved" || status === "denied")
       .length !== 1
   ) {
-    throw new Error("D1 device authorization decision race did not produce one winner");
+    throw new Error("Device authorization decision race did not produce one winner");
   }
 
   const second = await createFixture(storage, authorizationStorage, deviceStorage[0]);
-  const approval = await deviceStorage[0].approveDeviceAuthorization({
-    userCodeHash: second.authorization.userCodeHash,
-    userId: second.userId,
-    sessionId: second.sessionId,
-    approvedScopes: second.grant.scopes,
-    grant: second.grant,
-    decidedAt: new Date()
-  });
+  if (await deviceStorage[0].claimDeviceAuthorization({ ...reviewerInput(second), claimedAt: second.authorization.expiresAt })) {
+    throw new Error("An expired device request accepted a reviewer");
+  }
+  await deviceStorage[0].claimDeviceAuthorization({ ...reviewerInput(second), claimedAt: new Date() });
+  const approval = await deviceStorage[0].approveDeviceAuthorization(decisionInput(second));
   if (approval.status !== "approved") {
-    throw new Error("D1 device authorization fixture could not be approved");
+    throw new Error("Device authorization fixture could not be approved");
+  }
+  if (await deviceStorage[1].claimDeviceAuthorization({ ...reviewerInput(second), claimedAt: new Date() })) {
+    throw new Error("A decided device request accepted another reviewer claim");
   }
   const accessTokens = [0, 1].map((index) => createAccessToken(second, index));
   const consumed = await Promise.all(accessTokens.map((accessToken, index) =>
@@ -69,13 +81,13 @@ export async function assertDeviceAuthorizationRaces(
     })
   ));
   if (consumed.filter(Boolean).length !== 1) {
-    throw new Error("D1 device authorization issued tokens more than once");
+    throw new Error("Device authorization issued tokens more than once");
   }
   const stored = await Promise.all(accessTokens.map(({ tokenHash }) =>
     authorizationStorage.getAuthorizationAccessTokenByHash(tokenHash)
   ));
   if (stored.filter(Boolean).length !== 1) {
-    throw new Error("D1 device authorization did not persist exactly one access token");
+    throw new Error("Device authorization did not persist exactly one access token");
   }
 }
 
@@ -85,6 +97,36 @@ interface DeviceFixture {
   grant: AuthorizationGrant;
   sessionId: string;
   userId: string;
+}
+
+type DeviceReviewer = Pick<DeviceFixture, "userId" | "sessionId">;
+
+function reviewerInput(fixture: DeviceFixture, reviewer: DeviceReviewer = fixture) {
+  return { userCodeHash: fixture.authorization.userCodeHash, userId: reviewer.userId, sessionId: reviewer.sessionId };
+}
+
+function decisionInput(fixture: DeviceFixture, reviewer: DeviceReviewer = fixture) {
+  return { ...reviewerInput(fixture, reviewer), approvedScopes: fixture.grant.scopes,
+    grant: { ...fixture.grant, userId: reviewer.userId }, decidedAt: new Date() };
+}
+
+async function assertReviewerRejected(
+  fixture: DeviceFixture,
+  reviewer: DeviceReviewer,
+  storage: readonly [DeviceAuthorizationStorage, DeviceAuthorizationStorage],
+  authorizationStorage: AuthorizationServerStorage
+): Promise<void> {
+  const decisions = await Promise.all([
+    storage[0].approveDeviceAuthorization(decisionInput(fixture, reviewer)),
+    storage[1].denyDeviceAuthorization(decisionInput(fixture, reviewer))
+  ]);
+  const claim = await storage[1].claimDeviceAuthorization({ ...reviewerInput(fixture, reviewer), claimedAt: new Date() });
+  if (claim || decisions.some(({ status }) => status !== "invalid")) {
+    throw new Error("Another session changed the claimed device request");
+  }
+  if (await authorizationStorage.getAuthorizationGrant(fixture.clientRecordId, reviewer.userId, null)) {
+    throw new Error("A rejected device decision persisted an unauthorized grant");
+  }
 }
 
 async function createFixture(
@@ -166,7 +208,7 @@ async function createFixture(
   await authorizationStorage.createAuthorizationClient({
     id: clientRecordId,
     clientId: `oa_client_${suffix}`,
-    name: "D1 device race client",
+    name: "Device race client",
     clientType: "public",
     applicationType: "native",
     tokenEndpointAuthMethod: "none",

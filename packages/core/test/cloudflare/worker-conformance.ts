@@ -122,6 +122,7 @@ const authorizationStorageMethods = new Set([
 ]);
 
 const deviceAuthorizationStorageMethods = new Set([
+  "claimDeviceAuthorization",
   "approveDeviceAuthorization",
   "consumeDeviceAuthorization",
   "createDeviceAuthorization",

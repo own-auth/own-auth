@@ -1,6 +1,7 @@
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { audit, rateLimit } from "./auth-engine-helpers.js";
 import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
+import { deviceReviewerMatches } from "./authorization-server-device-state.js";
 import { getCurrentSession } from "./auth-engine-sessions.js";
 import {
   authenticateAuthorizationClient,
@@ -140,6 +141,13 @@ export async function getDeviceAuthorization(
   await rateLimitDeviceLookup(ctx, input.request?.ipAddress, current?.user.id);
   const loaded = await loadPageAuthorization(ctx, input.userCode);
   if (!current) return publicDeviceAuthorization(loaded, "sign_in");
+  const claimed = await loaded.deviceStorage.claimDeviceAuthorization({
+    userCodeHash: loaded.authorization.userCodeHash,
+    userId: current.user.id,
+    sessionId: current.session.id,
+    claimedAt: new Date()
+  });
+  if (!claimed) throw invalidDeviceAuthorization();
   const grant = await loaded.storage.getAuthorizationGrant(
     loaded.client.id,
     current.user.id,
@@ -178,6 +186,7 @@ export async function approveDeviceAuthorization(
   const current = await requireDeviceSession(ctx, input.sessionToken);
   await rateLimitDeviceLookup(ctx, input.request?.ipAddress, current.user.id);
   const loaded = await loadPageAuthorization(ctx, input.userCode);
+  if (!deviceReviewerMatches(loaded.authorization, current.user.id, current.session.id)) throw invalidDeviceAuthorization();
   const existingGrant = await loaded.storage.getAuthorizationGrant(
     loaded.client.id,
     current.user.id,
@@ -229,6 +238,7 @@ export async function denyDeviceAuthorization(
   const current = await requireDeviceSession(ctx, input.sessionToken);
   await rateLimitDeviceLookup(ctx, input.request?.ipAddress, current.user.id);
   const loaded = await loadPageAuthorization(ctx, input.userCode);
+  if (!deviceReviewerMatches(loaded.authorization, current.user.id, current.session.id)) throw invalidDeviceAuthorization();
   const result = await loaded.deviceStorage.denyDeviceAuthorization({
     userCodeHash: loaded.authorization.userCodeHash,
     userId: current.user.id,

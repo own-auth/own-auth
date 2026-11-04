@@ -9,6 +9,14 @@ type DeviceDecisionFailure = Extract<
   { status: "already_decided" | "invalid" }
 >;
 
+export function deviceReviewerMatches(
+  authorization: DeviceAuthorization | null,
+  userId: string,
+  sessionId: string
+): authorization is DeviceAuthorization {
+  return authorization !== null && authorization.userId === userId && authorization.sessionId === sessionId;
+}
+
 export function deviceDecisionState(
   authorization: DeviceAuthorization | null,
   at: Date

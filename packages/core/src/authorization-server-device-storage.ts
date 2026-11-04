@@ -7,13 +7,9 @@ import type {
 import type { AuthorizationGrant } from "./authorization-server-types.js";
 import type { AuthorizationServerStorage } from "./authorization-server-storage.js";
 
-export interface ApproveDeviceAuthorizationStorageInput {
-  userCodeHash: string;
-  userId: string;
-  sessionId: string;
+export interface ApproveDeviceAuthorizationStorageInput extends DenyDeviceAuthorizationStorageInput {
   approvedScopes: string[];
   grant: AuthorizationGrant;
-  decidedAt: Date;
 }
 
 export interface DenyDeviceAuthorizationStorageInput {
@@ -21,6 +17,11 @@ export interface DenyDeviceAuthorizationStorageInput {
   userId: string;
   sessionId: string;
   decidedAt: Date;
+}
+
+export interface ClaimDeviceAuthorizationStorageInput
+  extends Omit<DenyDeviceAuthorizationStorageInput, "decidedAt"> {
+  claimedAt: Date;
 }
 
 export interface PollDeviceAuthorizationInput {
@@ -39,6 +40,9 @@ export interface DeviceAuthorizationStorage {
   getDeviceAuthorizationByDeviceCodeHash(
     deviceCodeHash: string
   ): Promise<DeviceAuthorization | null>;
+  claimDeviceAuthorization(
+    input: ClaimDeviceAuthorizationStorageInput
+  ): Promise<boolean>;
   approveDeviceAuthorization(
     input: ApproveDeviceAuthorizationStorageInput
   ): Promise<DeviceAuthorizationDecisionResult>;
@@ -68,6 +72,7 @@ export function isDeviceAuthorizationCapableStorage(
     "createDeviceAuthorization",
     "getDeviceAuthorizationByUserCodeHash",
     "getDeviceAuthorizationByDeviceCodeHash",
+    "claimDeviceAuthorization",
     "approveDeviceAuthorization",
     "denyDeviceAuthorization",
     "pollDeviceAuthorization",

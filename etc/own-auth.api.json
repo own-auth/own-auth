@@ -411,6 +411,7 @@
     "CallOwnAuthPluginMethodOptions",
     "ChangeMemberRoleInput",
     "ChangePasswordInput",
+    "ClaimDeviceAuthorizationStorageInput",
     "ClaimWebhookDeliveriesInput",
     "ClaimedWebhookDelivery",
     "CleanupAuditLogsInput",

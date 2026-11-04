@@ -42,6 +42,11 @@ export async function eraseAuthorizationInventory({ storage, rateLimits, reopen 
   await provider.deviceAuthorizationStorage.createDeviceAuthorization(deviceAuthorization({ id: id("device"),
     authorizationClientId: client.id, deviceCodeHash: id("device-hash"), userCodeHash: id("user-code-hash"), status: "approved",
     userId: target.id, sessionId: session.id, grantId: grant.id, approvedScopes: ["openid"], approvedAt: now, expiresAt, createdAt: now }));
+  await provider.deviceAuthorizationStorage.createDeviceAuthorization(deviceAuthorization({ id: id("pending-device"),
+    authorizationClientId: client.id, deviceCodeHash: id("pending-device-hash"), userCodeHash: id("pending-user-code-hash"),
+    expiresAt, createdAt: now }));
+  assert(await provider.deviceAuthorizationStorage.claimDeviceAuthorization({ userCodeHash: id("pending-user-code-hash"),
+    userId: target.id, sessionId: session.id, claimedAt: now }), "pending device reviewer reserved");
   const saml = await storage.samlStorage.createConnection({ ...samlConnection(), id: id("saml"), key: id("saml-key"), organisationId: organisation.id });
   await storage.samlStorage.createTransaction({ ...samlTransaction(), id: id("saml-transaction"), connectionId: saml.id,
     relayStateHash: id("relay"), requestIdHash: id("request"), userId: target.id, expiresAt, createdAt: now });
@@ -66,6 +71,8 @@ export async function eraseAuthorizationInventory({ storage, rateLimits, reopen 
   equal(await restoredProvider.getAuthorizationRefreshTokenByHash(id("refresh-hash")), null, "refresh token removed");
   equal(await restoredProvider.getOidcSubjectByUserId(target.id), null, "OIDC subject removed");
   equal(await restoredProvider.deviceAuthorizationStorage.getDeviceAuthorizationByDeviceCodeHash(id("device-hash")), null, "approved device removed");
+  equal(await restoredProvider.deviceAuthorizationStorage.getDeviceAuthorizationByDeviceCodeHash(id("pending-device-hash")),
+    null, "claimed pending device removed");
   equal(await restarted.samlStorage.getTransactionByRelayStateHash(id("relay")), null, "SAML request removed");
   equal(await restarted.scimStorage.getUserById(id("scim-user")), null, "SCIM tombstone removed");
   equal((await restoredProvider.getAuthorizationClientById(client.id))?.id, client.id, "shared client preserved");
