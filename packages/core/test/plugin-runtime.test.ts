@@ -8,6 +8,35 @@ import {
 } from "../src/index.js";
 
 describe("plugin runtime", () => {
+  it("shares the plugin IP budget across IPv6 addresses in the same network", async () => {
+    const plugin = defineOwnAuthPlugin({
+      id: "ip-budget",
+      version: "1.0.0",
+      rateLimits: [{ id: "requests", limit: 2, windowMs: 60_000, key: "ip" }],
+      endpoints: [{
+        id: "read",
+        method: "GET",
+        summary: "Read plugin data",
+        output: { type: "string" },
+        rateLimit: "requests",
+        handler: () => "ok"
+      }]
+    });
+    const auth = createOwnAuth({
+      storage: new InMemoryAuthStorage(),
+      tokenPepper: "plugin-ip-budget",
+      plugins: [plugin]
+    });
+    const endpoint = auth.findPluginEndpoint("/plugins/ip-budget/read", "GET")!;
+    const execute = (ipAddress: string) =>
+      auth.executePluginEndpoint(endpoint, undefined, null, { ipAddress });
+
+    await expect(execute("2001:db8:1:2::1")).resolves.toBe("ok");
+    await expect(execute("2001:db8:1:2::2")).resolves.toBe("ok");
+    await expect(execute("2001:db8:1:2::3")).rejects.toMatchObject({ code: "rate_limited" });
+    await expect(execute("2001:db8:1:3::1")).resolves.toBe("ok");
+  });
+
   it("runs direct SDK calls through immutable before-hooks and redacted after-hooks", async () => {
     let beforeInput: unknown;
     let afterResult: unknown;

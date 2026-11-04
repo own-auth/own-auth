@@ -1,5 +1,6 @@
 import { createId, randomBase64Url, safeEqual } from "./crypto.js";
 import { AuthError, isAuthError } from "./errors.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { completeFirstFactor } from "./auth-engine-mfa.js";
 import {
@@ -241,7 +242,7 @@ async function rateLimitByIp(
   windowMs: number
 ): Promise<void> {
   if (ipAddress) {
-    await rateLimit(ctx, action, `${connectionId}:${ipAddress}`, limit, windowMs);
+    await rateLimit(ctx, action, `${connectionId}:${rateLimitIpIdentifier(ipAddress)}`, limit, windowMs);
   }
 }
 

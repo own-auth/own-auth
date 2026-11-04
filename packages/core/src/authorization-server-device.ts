@@ -1,5 +1,6 @@
 import type { AuthEngineContext } from "./auth-engine-context.js";
 import { audit, rateLimit } from "./auth-engine-helpers.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 import { getCurrentSession } from "./auth-engine-sessions.js";
 import {
   authenticateAuthorizationClient,
@@ -376,7 +377,7 @@ async function rateLimitDeviceStart(
     await rateLimit(
       ctx,
       "authorization_server_device_start_ip",
-      ipAddress,
+      rateLimitIpIdentifier(ipAddress),
       authorizationServerRateLimits.deviceStart,
       authorizationServerRateLimitWindowMs
     );
@@ -392,7 +393,7 @@ async function rateLimitDeviceLookup(
     await rateLimit(
       ctx,
       "authorization_server_device_lookup_ip",
-      ipAddress,
+      rateLimitIpIdentifier(ipAddress),
       authorizationServerRateLimits.deviceLookup,
       authorizationServerRateLimitWindowMs
     );

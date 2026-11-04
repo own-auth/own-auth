@@ -6,6 +6,7 @@ import {
 } from "./authorization-server-constants.js";
 import { requireAuthorizationServer } from "./authorization-server-helpers.js";
 import type { RequestContext } from "./types.js";
+import { rateLimitIpIdentifier } from "./rate-limit-ip.js";
 
 interface ProtocolRateLimitInput {
   clientId?: string;
@@ -20,7 +21,7 @@ export function rateLimitAuthorizationServerProtocol(
   return rateLimit(
     ctx,
     `authorization_server_${operation}`,
-    input.request?.ipAddress ?? input.clientId ?? "unknown",
+    input.request?.ipAddress ? rateLimitIpIdentifier(input.request.ipAddress) : input.clientId ?? "unknown",
     authorizationServerRateLimits.protocol,
     authorizationServerRateLimitWindowMs
   );
@@ -49,7 +50,7 @@ export function rateLimitFailedProtectedResourceAuthentication(
   return rateLimit(
     ctx,
     "authorization_server_introspection_auth_failed",
-    ipAddress,
+    rateLimitIpIdentifier(ipAddress),
     config.failedIntrospectionAttemptsPerMinute,
     60_000
   );

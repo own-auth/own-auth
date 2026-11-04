@@ -2,6 +2,10 @@
 
 Own Auth applies built-in rate limits to sensitive authentication entry points. Core limits do not need middleware or separate configuration.
 
+IP based limits use one shared budget for each IPv6 `/64` network, regardless of address spelling or host address rotation within that network. IPv4 mapped IPv6 addresses share the corresponding IPv4 budget. Invalid supplied addresses share a single invalid address budget. These rules apply to OAuth, SAML, authorization server requests, device authorization, failed SCIM authentication, and plugin limits declared with `key: "ip"`.
+
+Supply the actual client IP through a trusted server integration or `getRequestContext`. Do not copy arbitrary forwarding headers into this field. Address grouping changes only rate limit identifiers, so audit and session records retain the original address.
+
 ## Built-in limits
 
 | Operation | Identifier | Default limit | Window |

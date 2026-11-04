@@ -5,6 +5,7 @@ import type { AtomicAuthEventWrite } from "../../src/auth-storage-atomic.js";
 import { emailOwnershipAdapterCases } from "./email-ownership-cases.js";
 import { totpRateLimitAdapterCases } from "./totp-rate-limit-cases.js";
 import { passwordResetAdapterCases } from "./password-reset-cases.js";
+import { authenticationPurposeAdapterCases } from "./authentication-purpose-cases.js";
 import {
   assertConformanceArrayEqual,
   assertConformanceEqual,
@@ -31,6 +32,7 @@ export const atomicAdapterCases: readonly AtomicAdapterCase[] = [
   ...emailOwnershipAdapterCases,
   ...totpRateLimitAdapterCases,
   ...passwordResetAdapterCases,
+  ...authenticationPurposeAdapterCases,
   {
     name: "allows only one connection to consume a token",
     async run({ storage }) {
