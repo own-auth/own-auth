@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.14
+
+### Fixed
+
+- The Postgres migration command now applies only core migrations that the database has not recorded. Running it again no longer repeats completed schema changes. Concurrent commands wait for the current migration transaction, and a failed upgrade rolls back its changes.
+
 ### Security
 
 - Device approval now requires a prior signed in lookup and a decision from the same reviewing session. Another account with the short code cannot replace that reviewer or decide the request. Custom device storage adapters must implement atomic reviewer claims and enforce ownership on approval and denial. No new schema migration is required.

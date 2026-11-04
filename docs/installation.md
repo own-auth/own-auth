@@ -50,6 +50,12 @@ For Postgres:
 npx own-auth migrate
 ```
 
+The command applies missing core migrations in order and skips versions already
+recorded in `own_auth_migrations`. Run it again after upgrading the package.
+Concurrent commands against the same schema wait for one another. A failed core
+upgrade rolls back its changes. Missing plugin migrations run after the core is
+current.
+
 This creates the tables Own Auth needs in your database:
 
 - `own_auth_migrations`

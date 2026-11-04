@@ -1,6 +1,6 @@
 {
   "name": "own-auth",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "type": "module",
   "description": "Framework-independent TypeScript authentication that keeps auth data under your control.",
   "license": "MIT",
@@ -148,8 +148,8 @@
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "pack:check": "npm pack --dry-run",
     "test": "vitest run",
-    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
-    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
+    "test:integration": "vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cli-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
+    "test:integration:required": "OWN_AUTH_REQUIRE_POSTGRES=true vitest run test/postgres/postgres-storage.integration.test.ts test/postgres/postgres-concurrency.integration.test.ts test/postgres/postgres-device-authorization.integration.test.ts test/postgres/postgres-migrations.integration.test.ts test/postgres/postgres-cli-migrations.integration.test.ts test/postgres/postgres-cloud.integration.test.ts test/postgres/postgres-user-erasure.integration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/types/tsconfig.json"
   },
   "dependencies": {
