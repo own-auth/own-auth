@@ -25,6 +25,7 @@ export interface PostgresTestDatabase {
 }
 
 export interface PostgresTestDatabaseOptions {
+  migrations?: readonly (typeof coreMigrationFiles)[number][];
   afterMigration?(file: (typeof coreMigrationFiles)[number], client: pg.PoolClient): Promise<void>;
 }
 
@@ -39,7 +40,7 @@ export async function createPostgresTestDatabase(
     await client.query(`create schema ${quoteIdentifier(schema)}`);
     await setSearchPath(client, schema);
 
-    for (const file of coreMigrationFiles) {
+    for (const file of options.migrations ?? coreMigrationFiles) {
       await client.query(await readCoreMigration(file));
       await options.afterMigration?.(file, client);
     }

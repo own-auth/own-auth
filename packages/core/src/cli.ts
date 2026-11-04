@@ -149,7 +149,7 @@ export async function runCli(
     if (args.command === "migrate") {
       const appliedPlugins = await migrate(
         databaseUrl,
-        await readCoreMigrationSql(),
+        await readCoreMigrations(),
         pluginMigrations,
         dependencies
       );
@@ -238,13 +238,33 @@ function requireValue(args: string[], index: number, name: string): string {
 
 async function migrate(
   databaseUrl: string,
-  sql: string,
+  migrations: readonly CoreMigration[],
   pluginMigrations: readonly ResolvedPluginMigration[],
   dependencies: CliDependencies
 ): Promise<number> {
   const database = dependencies.createDatabase(databaseUrl);
   try {
-    await database.query(sql);
+    if (!database.transaction) {
+      throw new Error("Core migrations require a database transaction implementation");
+    }
+    await database.transaction(async (transaction) => {
+      await transaction.query("select pg_advisory_xact_lock(hashtext(current_schema()), hashtext('own_auth_migrations'))");
+      const table = await transaction.query<{ tableName: string | null }>(
+        "select to_regclass('own_auth_migrations')::text as \"tableName\""
+      );
+      const result = table.rows[0]?.tableName
+        ? await transaction.query<{ version: string }>("select version from own_auth_migrations")
+        : { rows: [] };
+      const applied = new Set(result.rows.map(({ version }) => version));
+      if ([...applied].some((version) => !coreMigrationVersions.includes(version))) {
+        throw new Error("Database is newer than this own-auth version");
+      }
+      for (const migration of migrations) {
+        if (!applied.has(migration.file.replace(/\.sql$/, ""))) {
+          await transaction.query(migration.sql);
+        }
+      }
+    });
     return await applyPluginMigrations(database, pluginMigrations);
   } finally {
     await database.end();
